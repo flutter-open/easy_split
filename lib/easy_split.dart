@@ -1,4 +1,4 @@
-import 'dart:ui' show DisplayFeatureType;
+import 'dart:ui' show DisplayFeatureType, PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 
@@ -86,6 +86,7 @@ class EasySplitConfig {
 /// 1. 列表页（栈底）手动包 [EasySplitScope] —— 你自己决定谁是左栏
 /// 2. 路由接入三选一（按你的路由方案）：
 ///    - MaterialApp/CupertinoApp：`onGenerateRoute: EasySplit.routeAdapter({...})`
+///    - MaterialApp.router / Router：`easySplitNativeRouterConfig(home:, pageBuilders:)`
 ///    - GoRouter pageBuilder / Navigator.pages：`EasySplitPage(child: ..., name: ...)`
 ///    - 完全手动：`EasySplitRoute(builder: ...)`
 /// 3. 配置：`EasySplit.config`（[EasySplitConfig]，也可用下方便捷存取器）
@@ -212,6 +213,9 @@ class EasySplit {
 
   /// 原生 router 模式（MaterialApp.router，无 go_router）的 RouterConfig
   ///
+  /// 与 `onGenerateRoute` 方案行为一致，页面里的
+  /// `Navigator.pushNamed` / `Navigator.pop` 无需任何改动。
+  ///
   /// ```dart
   /// final delegate = EasySplitRouterDelegate(
   ///   home: RootPage(),
@@ -220,8 +224,9 @@ class EasySplit {
   /// MaterialApp.router(
   ///   routerConfig: EasySplit.nativeRouterConfig(delegate: delegate),
   /// )
-  /// // 页面内跳转：delegate.push('/detail')；返回：Navigator.pop
   /// ```
+  ///
+  /// 不需要持有 delegate 时，直接用一行的 [easySplitNativeRouterConfig]。
   static RouterConfig<String> nativeRouterConfig({
     required EasySplitRouterDelegate delegate,
     RootBackButtonDispatcher? backButtonDispatcher,
@@ -230,7 +235,10 @@ class EasySplit {
       routerDelegate: delegate,
       routeInformationParser: const _EasySplitRouteInformationParser(),
       routeInformationProvider: PlatformRouteInformationProvider(
-        initialRouteInformation: const RouteInformation(location: '/'),
+        // 平台启动路由（深链）；普通启动为 '/'
+        initialRouteInformation: RouteInformation(
+          uri: Uri.parse(PlatformDispatcher.instance.defaultRouteName),
+        ),
       ),
       backButtonDispatcher: backButtonDispatcher ?? RootBackButtonDispatcher(),
     );
@@ -283,6 +291,7 @@ class _EasySplitRouteInformationParser extends RouteInformationParser<String> {
 
   @override
   Future<String> parseRouteInformation(RouteInformation routeInformation) async {
-    return routeInformation.uri?.toString() ?? '/';
+    final path = routeInformation.uri.path;
+    return path.isEmpty ? '/' : path;
   }
 }

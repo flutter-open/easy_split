@@ -1,7 +1,4 @@
 import 'package:easy_split/easy_split.dart';
-
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'pages.dart';
@@ -17,7 +14,7 @@ import 'pages.dart';
 void main() => runApp(const DemoApp());
 
 /// 本 demo 使用的接入方式（首页标题下方展示）
-const kRouteScheme = '方案一 · onGenerateRoute（EasySplit.routeAdapter）';
+const kRouteScheme = '方案 · onGenerateRoute（EasySplit.routeAdapter）';
 
 class DemoApp extends StatelessWidget {
   const DemoApp({super.key});
@@ -27,7 +24,7 @@ class DemoApp extends StatelessWidget {
     EasySplit.config.fullscreenRoutes.add('/home');
 
     return MaterialApp(
-      title: 'EasySplit · 方案一 onGenerateRoute',
+      title: 'EasySplit · 方案 onGenerateRoute',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
       home: const AdPage(),
       // 极简路由表：宽屏自动分栏 / 窄屏全屏；arguments 用 ModalRoute 取

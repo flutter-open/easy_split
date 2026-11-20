@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -5,10 +7,12 @@ import '../easy_split.dart';
 
 /// 宽屏 pane 路由：真·原生路由（PageRoute）
 ///
-/// 与 MaterialPageRoute 的区别（仅为实现分栏所需的 4 点）：
+/// 与 MaterialPageRoute 的区别（仅为实现分栏所需的 5 点）：
 /// - opaque=false：下层页面持续绘制（左栏首页可见、可点击、状态保留）
 /// - 无 ModalBarrier：点击可穿透到左栏
 /// - delegatedTransition 透传：抑制系统转场对下层页面的视差位移
+/// - 整条路由缩进右栏：位置定在 buildTransitions 外层（见该处注释），
+///   让 PageRoute 自带的手势层（iOS 侧滑返回热区）也锚定在 pane 左缘
 /// - 内容自适应：宽屏渲染到右侧 pane 区域，折叠自动恢复全屏
 ///
 /// 转场动画委托给原始路由的实现（Cupertino 滑动 / 主题平台转场），
@@ -73,13 +77,32 @@ class EasySplitRoute<T> extends PageRoute<T>
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return Theme.of(context).pageTransitionsTheme.buildTransitions<dynamic>(
-          this,
-          context,
-          animation,
-          kAlwaysDismissedAnimation,
-          child,
-        );
+    // 关键：把「转场 + PageRoute 自带的手势层」整体缩进右栏，而不是先全屏
+    // 再在 content 内部做定位。
+    //
+    // buildTransitions 的产物在 Overlay 里拿到的始终是「全屏」约束，而框架
+    // （以及自定义 PageTransitionsBuilder）会在这一层插入自己的手势探测器：
+    // 最典型的是 CupertinoPageTransitionsBuilder 的 iOS 侧滑返回热区
+    // —— Stack[child, PositionedDirectional(start: 0, width: 20,
+    // child: Listener(...))]，它贴着「路由盒子」的左边。路由盒子若是全屏，
+    // 热区就落在屏幕最左 = 左栏里：
+    //   · 从屏幕左缘右滑 → 把右栏详情 pop 掉（左栏手势被路由劫持）
+    //   · 从右栏左缘右滑 → 毫无反应（用户直觉的位置反而失效）
+    // buildContent 内部的 hitTest 裁剪管不到这一层。
+    //
+    // 所以这里先按主题/平台产出原始转场，再由 _PaneFrame 统一套上位置与
+    // 尺寸：整棵转场子树（含手势层）都在 pane 约束内布局。副作用同样正向：
+    // 转场动画只在右栏内播放，不再横扫左栏；Cupertino 的拖拽进度按 pane
+    // 宽度换算（手势与动画 1:1 跟手）。
+    final transition = Theme.of(context).pageTransitionsTheme
+        .buildTransitions<dynamic>(
+      this,
+      context,
+      animation,
+      kAlwaysDismissedAnimation,
+      child,
+    );
+    return _PaneFrame(child: transition);
   }
 }
 
@@ -176,10 +199,9 @@ class _RenderPaneHitTest extends RenderProxyBox {
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
     final rect = _paneRect;
     if (rect != null) {
-      final inside = rect.contains(position);
-      debugPrint('🟦 PaneRoute hitTest pos=$position inside=$inside '
-          'rect=$rect');
-      if (!inside) {
+      // paneRect 是全局坐标，position 是本渲染对象的局部坐标，必须先换算：
+      // 宽屏下本对象已被 _PaneFrame 缩进右栏，两者不再相等。
+      if (!rect.contains(localToGlobal(position))) {
         return false; // 左栏区域：本路由完全不参与命中 → 穿透
       }
     }
@@ -187,7 +209,46 @@ class _RenderPaneHitTest extends RenderProxyBox {
   }
 }
 
-/// 路由内容自适应容器
+/// 把整条路由（转场 + 框架自带的手势层）放进右栏
+///
+/// 位置和尺寸必须在这一层决定：buildTransitions 的产物拿到的是全屏约束，
+/// 只有在这里把约束缩成 pane，框架插入的手势探测器（iOS 侧滑返回热区）
+/// 和转场动画才会以 pane 为坐标系 —— 见 EasySplitRoute.buildTransitions。
+class _PaneFrame extends StatelessWidget {
+  const _PaneFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: EasySplit.config.enabled,
+      builder: (context, enabled, _) {
+        if (!(enabled && EasySplit.isWide(context))) {
+          // 折叠态：全屏（正常路由模式）
+          return child;
+        }
+        final size = MediaQuery.sizeOf(context);
+        final pane = EasySplit.layoutOf(context).paneRect;
+        return Padding(
+          padding: EdgeInsets.only(
+            left: pane.left,
+            top: pane.top,
+            right: math.max(0.0, size.width - pane.right),
+            bottom: math.max(0.0, size.height - pane.bottom),
+          ),
+          child: SizedBox(
+            width: pane.width,
+            height: pane.height,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 右栏面板装饰 + 安全区处理（位置/尺寸由 [_PaneFrame] 决定）
 class _PaneTeleport extends StatelessWidget {
   final Widget child;
 
@@ -203,48 +264,34 @@ class _PaneTeleport extends StatelessWidget {
           // 折叠态：全屏（正常路由模式）
           return child;
         }
-        // 宽屏：内容只占右栏矩形（与 EasySplitScope 共用同一布局，
-        // 支持 EasySplit.config.layoutDelegate 自定义）。
-        // 注意：这里不能铺满全屏——路由内容盒只落在右栏矩形，
-        // 左栏区域在路由树中没有任何节点，手势自然穿透到底部路由
-        final size = MediaQuery.sizeOf(context);
-        final layout = EasySplit.layoutOf(context);
         final mq = MediaQuery.of(context);
-        return Padding(
-          // 整体右移：内容盒从 paneRect.left 开始
-          padding: EdgeInsets.only(left: layout.paneRect.left),
-          child: SizedBox(
-            width: layout.paneRect.width,
-            height: size.height,
-            child: DecoratedBox(
-              decoration: EasySplit.config.paneDecoration ??
-                  BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    border: Border(
-                      left: BorderSide(
-                        color: Theme.of(context).dividerColor,
-                        width: 0.5,
-                      ),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.10),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-              child: MediaQuery(
-                data: mq.copyWith(
-                  padding: EasySplit.removeInsets(
-                      mq.padding, EasySplit.paneContentInsets(context)),
-                ),
-                child: Padding(
-                  padding: EasySplit.paneContentInsets(context),
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: child,
+        return DecoratedBox(
+          decoration: EasySplit.config.paneDecoration ??
+              BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border(
+                  left: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                    width: 0.5,
                   ),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+          child: MediaQuery(
+            data: mq.copyWith(
+              padding: EasySplit.removeInsets(
+                  mq.padding, EasySplit.paneContentInsets(context)),
+            ),
+            child: Padding(
+              padding: EasySplit.paneContentInsets(context),
+              child: Material(
+                type: MaterialType.transparency,
+                child: child,
               ),
             ),
           ),

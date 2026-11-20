@@ -2,128 +2,135 @@ import 'package:flutter/material.dart';
 
 import '../easy_split.dart';
 
-/// 原生 router 模式的现成分栏 RouterDelegate
+/// 原生 router 模式（MaterialApp.router，无 go_router）的 RouterDelegate
 ///
-/// 管理一个页面栈（根页 = EasySplitScope 包裹的首页，其余为分栏二级页）：
-/// - 宽屏（横屏）：二级页自动渲染到右侧分栏区域
-/// - 窄屏（折叠）：二级页自动恢复全屏（正常路由模式）
-/// - 页面栈完全保留，折叠/展开纯表现层切换
+/// 行为与 `onGenerateRoute` 方案**完全一致**，页面代码零改动：
+/// - `Navigator.pushNamed(context, '/detail')` → 宽屏右栏 / 窄屏全屏
+/// - `Navigator.pop(context)` / 系统返回 → 正常返回
+/// - `pushReplacementNamed` / `pushNamedAndRemoveUntil` 等与原生一致
+/// - 页面参数仍用 `ModalRoute.of(context)!.settings.arguments` 获取
 ///
 /// ```dart
-/// final delegate = EasySplitRouterDelegate(
-///   home: RootPage(),
-///   pageBuilders: {
-///     '/detail': (context) => DetailPage(),
-///     '/filter': (context) => FilterPage(),
-///   },
-/// );
-///
 /// MaterialApp.router(
-///   routerConfig: EasySplit.nativeRouterConfig(delegate),
+///   routerConfig: easySplitNativeRouterConfig(
+///     home: RootPage(),                                   // 启动首路由 '/'
+///     pageBuilders: {                                     // 与 routeAdapter 同一张表
+///       '/detail': (_) => DetailPage(),
+///       '/home': (_) => EasySplitScope(child: HomePage()), // 左栏自己包 Scope
+///     },
+///   ),
 /// )
-///
-/// // 页面内跳转 / 返回：
-/// delegate.push('/detail');
-/// Navigator.of(context).pop();
 /// ```
+///
+/// 注意：
+/// 1. `home` 就是 '/' 路由本身，**不会**被自动包 [EasySplitScope] ——
+///    谁是左栏由你在对应路由的 builder 里决定（与 `onGenerateRoute` 方案一致）。
+/// 2. `routerConfig` 请在 `build` 之外只创建一次（字段 / `late final`），
+///    否则每次重建都会生成新的 Navigator，路由栈会被重置。
 class EasySplitRouterDelegate extends RouterDelegate<String>
     with ChangeNotifier, PopNavigatorRouterDelegateMixin<String> {
   EasySplitRouterDelegate({
-    required Widget home,
-    required Map<String, WidgetBuilder> pageBuilders,
-    List<String> initialPages = const [],
-  })  : home = EasySplitScope(child: home),
-        pageBuilders = pageBuilders,
-        _stack = [...initialPages];
+    required this.home,
+    required this.pageBuilders,
+  });
 
-  /// 首页（自动包 EasySplitScope，作为左栏）
+  /// 启动首路由 '/' 的内容（原 MaterialApp.home）
   final Widget home;
 
-  /// 页面构建表：name → 页面构建器
+  /// 页面构建表：name → 页面构建器（与原 onGenerateRoute 的 routes 表相同）
   final Map<String, WidgetBuilder> pageBuilders;
-
-  /// 当前页面栈（根页之后的部分）
-  final List<String> _stack;
 
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   GlobalKey<NavigatorState> get navigatorKey => _navigatorKey;
 
-  /// 当前页面栈（只读视图）
-  List<String> get stack => List.unmodifiable(_stack);
-
-  /// push 一个页面（name 需在 pageBuilders 中注册）
-  void push(String name) {
-    assert(pageBuilders.containsKey(name),
-        'EasySplitRouterDelegate: 页面 "$name" 未在 pageBuilders 中注册');
-    _stack.add(name);
-    notifyListeners();
+  /// 等价于 `Navigator.pushNamed`：方便持有 delegate 的代码直接跳转
+  void push(String name, {Object? arguments}) {
+    _navigatorKey.currentState?.pushNamed(name, arguments: arguments);
   }
 
-  /// pop 栈顶页面（栈只剩首页时忽略）
-  void pop() {
-    if (_stack.isEmpty) return;
-    _stack.removeLast();
-    notifyListeners();
+  /// 等价于 `Navigator.pop`
+  Future<bool> pop<T extends Object?>([T? result]) async {
+    return await _navigatorKey.currentState?.maybePop<T>(result) ?? false;
   }
+
+  /// 首帧之前收到的深链（Router 在构建 Navigator 前会调用一次 setNewRoutePath）
+  String? _pendingLocation;
 
   @override
   Widget build(BuildContext context) {
+    final pending = _pendingLocation;
+    if (pending != null) {
+      _pendingLocation = null;
+      // Navigator 就在这一帧里创建：等本帧构建完成后把深链同步进去
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncRoute(pending));
+    }
     return Navigator(
       key: navigatorKey,
-      pages: [
-        // 根页：首页 + Scope（左栏）
-        EasySplitPage<String>(
-          name: '/',
-          child: (_) => home,
-        ),
-        // 二级页：每级一个 EasySplitPage（宽屏分栏 / 折叠全屏）
-        for (final name in _stack)
-          EasySplitPage<String>(
-            name: name,
-            child: (_) => (pageBuilders[name] ?? (_) => const SizedBox())(
-                context),
-          ),
-      ],
-      onPopPage: (route, result) {
-        if (!route.didPop(result)) return false;
-        final name = route.settings.name;
-        if (name != null) _stack.remove(name);
-        notifyListeners();
-        return true;
+      // 关键：使用普通命名路由 Navigator，页面里的 Navigator.pushNamed/pop
+      // 无需任何改动；'/' 原样走 MaterialPageRoute（全屏），与 MaterialApp.home
+      // 的行为一致；其余路由交给 EasySplit.adaptRoute 决定分栏 / 全屏。
+      onGenerateRoute: (settings) {
+        if (settings.name == Navigator.defaultRouteName) {
+          return MaterialPageRoute<dynamic>(
+            builder: (_) => home,
+            settings: settings,
+          );
+        }
+        final builder = pageBuilders[settings.name];
+        if (builder == null) return null;
+        return EasySplit.adaptRoute(settings, builder);
       },
     );
   }
 
   @override
   Future<void> setNewRoutePath(String configuration) async {
-    if (pageBuilders.containsKey(configuration)) push(configuration);
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      // 首帧（Router 在构建 Navigator 之前就会调用一次，configuration 通常是 '/'）
+      _pendingLocation = configuration;
+      return;
+    }
+    _syncRoute(configuration);
+  }
+
+  /// 把 Router 的位置同步到 Navigator：
+  /// - '' / '/' → 回到栈底（首帧和浏览器后退）
+  /// - 已注册的命名路由 → 压栈（深链）
+  /// 未注册的深链直接忽略，避免 onGenerateRoute 返回 null 后抛错。
+  void _syncRoute(String configuration) {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    if (configuration.isEmpty || configuration == '/') {
+      navigator.popUntil((route) => route.isFirst);
+    } else if (pageBuilders.containsKey(configuration)) {
+      navigator.pushNamed(configuration);
+    }
   }
 }
 
 /// 基于 [EasySplitRouterDelegate] 的 RouterConfig（一行接入）
+///
+/// ```dart
+/// MaterialApp.router(
+///   routerConfig: easySplitNativeRouterConfig(
+///     home: RootPage(),
+///     pageBuilders: {'/detail': (_) => DetailPage()},
+///   ),
+/// )
+/// ```
 RouterConfig<String> easySplitNativeRouterConfig({
   required Widget home,
   required Map<String, WidgetBuilder> pageBuilders,
   RootBackButtonDispatcher? backButtonDispatcher,
 }) {
-  final delegate = EasySplitRouterDelegate(
-    home: home,
-    pageBuilders: pageBuilders,
+  return EasySplit.nativeRouterConfig(
+    delegate: EasySplitRouterDelegate(
+      home: home,
+      pageBuilders: pageBuilders,
+    ),
+    backButtonDispatcher: backButtonDispatcher,
   );
-  return RouterConfig<String>(
-    routerDelegate: delegate,
-    routeInformationParser: const _EasySplitRouteInformationParser(),
-    backButtonDispatcher: backButtonDispatcher ?? RootBackButtonDispatcher(),
-  );
-}
-
-class _EasySplitRouteInformationParser extends RouteInformationParser<String> {
-  const _EasySplitRouteInformationParser();
-
-  @override
-  Future<String> parseRouteInformation(RouteInformation routeInformation) async {
-    return routeInformation.uri?.toString() ?? '/';
-  }
 }

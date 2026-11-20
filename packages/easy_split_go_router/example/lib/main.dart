@@ -26,10 +26,11 @@ final _router = GoRouter(
     EasySplitGoRoute(path: '/detail', builder: (_, __) => const DetailPage()),
     // 二级页
     EasySplitGoRoute(
-        path: '/secondary', builder: (_, __) => const SecondaryPage()),
+      path: '/secondary',
+      builder: (_, __) => const SecondaryPage(),
+    ),
     // 系统弹窗大全
-    EasySplitGoRoute(
-        path: '/dialogs', builder: (_, __) => const DialogsPage()),
+    EasySplitGoRoute(path: '/dialogs', builder: (_, __) => const DialogsPage()),
   ],
 );
 
@@ -41,7 +42,7 @@ class DemoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'EasySplit · 方案二 GoRouter',
+      title: 'EasySplit · 方案 GoRouter',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
       routerConfig: _router,
     );
