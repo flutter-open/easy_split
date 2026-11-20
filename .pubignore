@@ -1,0 +1,13 @@
+# 开发记录文档，不随包发布
+NOTES.md
+
+# 本地临时目录 / IDE 文件
+.temp/
+.idea/
+.joycode/
+build/
+.DS_Store
+
+# 注意：这里刻意不排除 packages/。
+# pub 会把仓库根的 ignore 规则按「仓库根相对路径」套用到子包发布上，
+# 若这里写 packages/，在该目录下发布 easy_split_go_router 时所有文件都会被隐藏。

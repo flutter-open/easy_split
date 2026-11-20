@@ -2,9 +2,18 @@
 
 仿鸿蒙"平行视界"的 Flutter 实现：**一个路由栈，折叠（窄屏）= 正常全屏路由模式，展开（宽屏）= 自动左右分栏**，切换纯表现层、栈完全不动。
 
-纯适配器设计：**不继承任何 App、不替换任何方法**，与 MaterialApp（含 `.router`）/ CupertinoApp / GoRouter(routerConfig) / Navigator.pages 自由组合。
+纯适配器设计：**不继承任何 App、不替换任何方法**，与 MaterialApp（含 `.router`）/ CupertinoApp / Navigator.pages 自由组合。
 
-## 接入三件套
+## 安装
+
+需要 Flutter 3.27+。
+
+```yaml
+dependencies:
+  easy_split: ^0.1.0
+```
+
+## 接入
 
 ### 1. 列表页（栈底）包 `EasySplitScope` —— 你自己决定谁是左栏
 
@@ -14,7 +23,7 @@ MaterialApp(
 )
 ```
 
-### 2. 路由接入（按你的路由方案三选一，页面代码零改动）
+### 2. 路由接入（二选一，页面代码零改动）
 
 ```dart
 // 方案一：MaterialApp / CupertinoApp · onGenerateRoute
@@ -26,7 +35,7 @@ MaterialApp(
   }),
 )
 
-// 方案二：MaterialApp.router · RouterDelegate（不依赖 go_router）
+// 方案二：MaterialApp.router · RouterDelegate（纯 Flutter 实现，不引入第三方路由）
 // 页面里照旧 Navigator.pushNamed / pop / pushReplacementNamed，arguments 也从 ModalRoute 取
 final routerConfig = easySplitNativeRouterConfig(
   home: const AdPage(),                                   // 全屏首屏，不自动包 Scope
@@ -36,12 +45,11 @@ final routerConfig = easySplitNativeRouterConfig(
   },
 );
 MaterialApp.router(routerConfig: routerConfig)
-
-// 方案三：GoRouter · 把普通 GoRoute 换成 EasySplitGoRoute 即可
-// 见 packages/easy_split_go_router
 ```
 
 > 方案二的 `routerConfig` 只创建一次（顶层 final / State 字段）：若放进 `build()`，每次重建都会换掉 delegate 与 Navigator，路由栈随之丢失。
+
+其他路由体系（`Navigator.pages` 等）可直接用 `EasySplitPage(child: ..., name: ...)` 作为 `Page`，底层是同一套 `EasySplitRoute`。
 
 ### 2.1 重复路由去重（默认开启）
 
@@ -49,16 +57,10 @@ MaterialApp.router(routerConfig: routerConfig)
 
 | 方案 | 接入方式 |
 | --- | --- |
-| 方案二 MaterialApp.router | **自动生效**（delegate 内部拦截 `pushNamed`） |
 | 方案一 onGenerateRoute | 加一行 `navigatorObservers: [EasySplit.dedupeObserver]` |
-| 方案三 GoRouter | **自动生效**（`EasySplitGoRoute` 默认开启，可 `dedupe: false` 关闭） |
+| 方案二 MaterialApp.router | **自动生效**（delegate 内部拦截 `pushNamed`） |
 
 "同一页面"默认按 `name + arguments` 判断，可自定义：
-
-> GoRouter 方案的 push 由框架内部的 RouteInformationProvider 处理，无法直接拦截，
-> 因此实现方式是「新页面入栈后自动收敛路由栈」：效果与另外两个方案一致（重复项置顶、
-> 中间项弹掉），页面代码仍然只写 `context.push(...)`。ShellRoute / StatefulShellRoute
-> 的子页面暂不参与去重，保持原生行为。
 
 ```dart
 EasySplit.config
@@ -86,6 +88,14 @@ EasySplit.config
 
 便捷存取：`EasySplit.enabled`（动态开关）、`EasySplit.paneRatio` 等。
 
+几何相关配置（`paneRatio` / `breakpoint` / `layoutDelegate` / `layoutBuilder`）不是响应式的：
+改完调用一次 `EasySplit.updateLayout()`，已显示的分栏会立即按新布局重排（路由栈不动）：
+
+```dart
+EasySplit.paneRatio = 0.35;   // 或替换 layoutDelegate
+EasySplit.updateLayout();     // 立即重排
+```
+
 ### 4. 参数透传（路由外观 / 占位页）
 
 ```dart
@@ -99,7 +109,7 @@ EasySplitRoute(
   settings: const RouteSettings(name: '/detail'),
 )
 
-// Navigator.pages / GoRouter pageBuilder 场景
+// Navigator.pages 场景
 EasySplitPage(
   child: (_) => const DetailPage(), name: '/detail',
   fullscreen: false, maintainState: true, /* ...同上 */
@@ -118,18 +128,16 @@ MaterialApp.router 方案还可透传内部 Navigator 参数：
 ## 目录结构
 
 ```
-lib/easy_split.dart                  EasySplitConfig（配置一层包装）+ 核心 API
-lib/src/easy_split_pane_route.dart  EasySplitRoute / EasySplitPage
-lib/src/easy_split_scope.dart       EasySplitScope 分栏容器
+lib/easy_split.dart                      EasySplitConfig（配置一层包装）+ 核心 API
+lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
+lib/src/easy_split_scope.dart            EasySplitScope 分栏容器
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate（MaterialApp.router 接入）
 lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRoute 去重，一行接入）
-test/                                31 个行为测试（分栏手势、路由接入、去重与参数透传）
-example/                             三种路由方案 demo（独立入口，按需运行）
-  └─ lib/main.dart                   方案一：MaterialApp · onGenerateRoute 拦截器
-  └─ lib/main_1.dart                 方案二：MaterialApp.router · RouterDelegate
-  └─ lib/pages.dart                  各入口共享的页面
-packages/easy_split_go_router/       方案三：GoRouter · 把 GoRoute 换成 EasySplitGoRoute
-  └─ example/lib/main.dart           方案三 demo
+test/                                    35 个行为测试（分栏手势、路由接入、去重、参数透传、布局即时更新）
+example/
+  └─ lib/main.dart                       方案一：MaterialApp · onGenerateRoute 拦截器
+  └─ lib/main_1.dart                     方案二：MaterialApp.router · RouterDelegate
+  └─ lib/pages.dart                      两个入口共享的页面
 ```
 
 ## 手势穿透原理（PageRoute 在分栏里怎么不添乱）
@@ -144,6 +152,7 @@ EasySplit 用三层把它关进右栏：
    手势探测器——最典型的是 `CupertinoPageTransitionsBuilder` 的 iOS 侧滑返回热区
    （`Stack[child, PositionedDirectional(start: 0, width: 20, child: Listener(...))]`，贴着路由盒子的左边）。
    路由盒子若是全屏，热区就落在屏幕最左 = 左栏里，表现为：
+
    - 从**屏幕左缘**右滑 → 把右栏详情 pop 掉（左栏手势被路由劫持）
    - 从**右栏左缘**右滑 → 毫无反应（用户直觉的位置反而失效）
 
@@ -159,20 +168,21 @@ EasySplit 用三层把它关进右栏：
 回归测试：`test/pane_route_gesture_test.dart`（左栏点击/滚动穿透、右栏内容盒恰好落在 paneRect、
 iOS 侧滑锚定右栏左缘且不误触左栏、窄屏全屏、转场中左栏可交互、pop/push 往返）；
 `test/router_delegate_test.dart`（MaterialApp.router 宽/窄屏导航、pushNamed/pop/pushReplacementNamed/
-pushNamedAndRemoveUntil、delegate.push/pop、深链同步）。
+pushNamedAndRemoveUntil、delegate.push/pop、深链同步、去重、参数透传）；
+`test/dedupe_observer_test.dart`（onGenerateRoute 去重 observer）；
+`test/layout_update_test.dart`（改 `paneRatio` / 自定义布局后 `updateLayout` 立即重排，含上下分栏）。
 
-## 运行 Demo（-t 切换入口，方便对比复用）
+## 运行 Demo
 
 ```bash
 cd example
 flutter run -t lib/main.dart          # 方案一：onGenerateRoute 拦截器
 flutter run -t lib/main_1.dart        # 方案二：MaterialApp.router · RouterDelegate
-
-cd packages/easy_split_go_router/example
-flutter run                           # 方案三：GoRouter · EasySplitGoRoute
 ```
 
-右上角开关可随时关闭适配；下拉可切换布局模式（自动 / 自定义 / 关闭分栏）；旋转模拟器（Cmd+方向键）验证折叠/展开切换。
+右上角开关可随时关闭适配；下拉可切换布局模式（自动 / 自定义 / 关闭分栏）；「分栏设置」可实时切换左右分栏 / 内容在左 / 上下分栏 / 悬浮内容栏四种布局，并调整内容栏比例（拖动即重排）；旋转模拟器（Cmd+方向键）验证折叠/展开切换。
+
+示例还接了演示用的登录拦截：未登录时点首页任意入口会先进入模拟登录页（`/login` 全屏、不分栏），登录成功后再进入目标页；右上角可退出登录。相关代码在 `example/lib/pages.dart` 的 `DemoAuth` / `ensureLoggedIn` / `openProtected`。
 
 ## 设计要点
 
@@ -182,10 +192,6 @@ flutter run                           # 方案三：GoRouter · EasySplitGoRoute
 - 安全区方向感知：竖屏避上下、横屏避左右，旋转随 MediaQuery 自动更新
 - 铰链避让：`paneWidth` 计算扣除 `displayFeatures` 中的 hinge 区域
 
-## 运行 Demo
+## License
 
-```bash
-cd example && flutter run -d macos   # 或 iOS 模拟器，拖窗口宽度验证
-```
-
-右上角开关可随时关闭适配；下拉可切换布局模式（自动 / 自定义 / 关闭分栏）。
+MIT

@@ -10,13 +10,16 @@ import 'pages.dart';
 /// pushReplacementNamed`，arguments 照旧从 `ModalRoute.of(context)` 取。
 /// 接线只有两步：
 /// 1. 首页不是启动首路由（广告页 → replace 首页），把 '/home' 加入全屏名单，
-///    它内部自包 EasySplitScope 自行分栏；
+///    它内部自包 EasySplitScope 自行分栏；'/login' 也全屏（登录页不分栏）。
 /// 2. routerConfig 只创建一次（放顶层 final / State 字段）。
 ///
 /// 额外收益：重复路由去重（重复点同一页面时置顶）已内置，无需额外接入。
+///
+/// Demo 额外演示了登录拦截：首页所有入口在未登录时都会先跳 '/login' 模拟登录，
+/// 登录成功后再进入目标页（见 pages.dart 的 ensureLoggedIn / openProtected）。
 /// ============================================================================
 void main() {
-  EasySplit.config.fullscreenRoutes.add('/home');
+  EasySplit.config.fullscreenRoutes.addAll({'/home', '/login'});
   runApp(const DemoApp());
 }
 
@@ -30,6 +33,7 @@ final RouterConfig<String> _routerConfig = easySplitNativeRouterConfig(
   pageBuilders: {
     // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
     '/home': (_) => EasySplitScope(child: const HomePage(title: kRouteScheme)),
+    '/login': (_) => const LoginPage(),
     '/detail': (_) => const DetailPage(),
     '/secondary': (_) => const SecondaryPage(),
     '/dialogs': (_) => const DialogsPage(),

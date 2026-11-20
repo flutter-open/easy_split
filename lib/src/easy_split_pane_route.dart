@@ -251,9 +251,13 @@ class _PaneFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: EasySplit.config.enabled,
-      builder: (context, enabled, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        EasySplit.config.enabled,
+        EasySplit.config.layoutVersion,
+      ]),
+      builder: (context, _) {
+        final enabled = EasySplit.config.enabled.value;
         if (!(enabled && EasySplit.isWide(context))) {
           // 折叠态：全屏（正常路由模式）
           return child;
@@ -286,9 +290,13 @@ class _PaneTeleport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: EasySplit.config.enabled,
-      builder: (context, enabled, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        EasySplit.config.enabled,
+        EasySplit.config.layoutVersion,
+      ]),
+      builder: (context, _) {
+        final enabled = EasySplit.config.enabled.value;
         final paneMode = enabled && EasySplit.isWide(context);
         if (!paneMode) {
           // 折叠态：全屏（正常路由模式）

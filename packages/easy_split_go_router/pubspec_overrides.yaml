@@ -1,0 +1,5 @@
+# 本地开发用：easy_split 尚未发布时仍走仓库内路径。
+# 该文件不会被 pub publish 发布，发布时使用 pubspec.yaml 里的版本约束。
+dependency_overrides:
+  easy_split:
+    path: ../../

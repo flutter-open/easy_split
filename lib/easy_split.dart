@@ -39,7 +39,14 @@ class EasySplitConfig {
   double breakpoint;
 
   /// 宽屏下右侧面板占屏幕宽度比例（默认布局用）
+  ///
+  /// 修改后调用 [EasySplit.updateLayout] 让已显示的分栏立即按新比例重排。
   double paneRatio;
+
+  /// 分栏布局变更信号：修改 [paneRatio]、[breakpoint]、[layoutDelegate]、
+  /// [layoutBuilder] 等几何相关配置后，调用 [EasySplit.updateLayout]
+  /// 递增它，已显示的左栏与分栏路由会立即重建。
+  final ValueNotifier<int> layoutVersion = ValueNotifier<int>(0);
 
   /// 右侧仅有首页时的占位页
   WidgetBuilder? placeholderBuilder;
@@ -166,6 +173,17 @@ class EasySplit {
   static bool get dedupeRepeatedRoutes => config.dedupeRepeatedRoutes;
   static set dedupeRepeatedRoutes(bool value) =>
       config.dedupeRepeatedRoutes = value;
+
+  /// 通知分栏布局重算（修改几何相关配置后调用）
+  ///
+  /// 影响布局的配置（[paneRatio]、[breakpoint]、[layoutDelegate]、
+  /// [layoutBuilder]）不是响应式的，改完调用一次即可让已显示的分栏立即
+  /// 按新布局重排，路由栈不动：
+  /// ```dart
+  /// EasySplit.paneRatio = 0.35;
+  /// EasySplit.updateLayout();
+  /// ```
+  static void updateLayout() => config.layoutVersion.value++;
 
   /// 重复路由匹配规则（默认 name + arguments 相同）
   static bool Function(RouteSettings a, RouteSettings b)? get sameRoute =>

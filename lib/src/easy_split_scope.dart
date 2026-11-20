@@ -45,10 +45,15 @@ class EasySplitScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 监听适配总开关：EasySplit.enabled 切换后立即生效（路由栈不动，纯表现层）
-    return ValueListenableBuilder<bool>(
-      valueListenable: EasySplit.config.enabled,
-      builder: (context, enabled, _) {
+    // 监听适配总开关与布局变更：EasySplit.enabled / EasySplit.updateLayout
+    // 后立即生效（路由栈不动，纯表现层）
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        EasySplit.config.enabled,
+        EasySplit.config.layoutVersion,
+      ]),
+      builder: (context, _) {
+        final enabled = EasySplit.config.enabled.value;
         return LayoutBuilder(builder: (context, constraints) {
           // 宽屏判定统一走 EasySplit.isWide（可被 isWideOverride 自定义）
           final isWide = enabled && EasySplit.isWide(context);

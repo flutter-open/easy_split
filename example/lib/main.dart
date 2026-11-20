@@ -8,12 +8,18 @@ import 'pages.dart';
 ///
 /// 极简接线就两行：
 /// 1. 首页不是启动首路由（广告页 → replace 首页），把 '/home' 加入全屏名单，
-///    它内部自包 EasySplitScope 自行分栏；
+///    它内部自包 EasySplitScope 自行分栏；'/login' 也全屏（登录页不分栏）。
 /// 2. onGenerateRoute 用 EasySplit.routeAdapter({...})，命中即分栏路由。
 /// 3.（可选，推荐）navigatorObservers 加 EasySplit.dedupeObserver：
 ///    重复点同一个页面时把栈内已有的置顶，而不是反复压栈。
+///
+/// Demo 额外演示了登录拦截：首页所有入口在未登录时都会先跳 '/login' 模拟登录，
+/// 登录成功后再进入目标页（见 pages.dart 的 ensureLoggedIn / openProtected）。
 /// ============================================================================
-void main() => runApp(const DemoApp());
+void main() {
+  EasySplit.config.fullscreenRoutes.addAll({'/home', '/login'});
+  runApp(const DemoApp());
+}
 
 /// 本 demo 使用的接入方式（首页标题下方展示）
 const kRouteScheme = '方案 · onGenerateRoute（EasySplit.routeAdapter）';
@@ -23,8 +29,6 @@ class DemoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    EasySplit.config.fullscreenRoutes.add('/home');
-
     return MaterialApp(
       title: 'EasySplit · 方案 onGenerateRoute',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
@@ -36,6 +40,7 @@ class DemoApp extends StatelessWidget {
         // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
         '/home': (_) =>
             EasySplitScope(child: const HomePage(title: kRouteScheme)),
+        '/login': (_) => const LoginPage(),
         '/detail': (_) => const DetailPage(),
         '/secondary': (_) => const SecondaryPage(),
         '/dialogs': (_) => const DialogsPage(),

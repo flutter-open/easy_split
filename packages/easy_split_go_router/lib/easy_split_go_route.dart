@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_split/easy_split.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +41,9 @@ export 'package:easy_split/easy_split.dart'
 /// 无法像 MaterialApp.router 方案那样拦截 `pushNamed`，因此去重是基于
 /// pageBuilder 在「新页面入栈后」自动收敛路由栈实现的；对页面代码零改动。
 /// ShellRoute / StatefulShellRoute 内的子页面暂不参与去重（保持原生行为）。
+///
+/// [redirect] / [onExit] / [caseSensitive] 与 [GoRoute] 同义，原样透传给父类，
+/// 因此分栏页面同样可以写路由级登录拦截、离开确认。
 class EasySplitGoRoute extends GoRoute {
   EasySplitGoRoute({
     required String path,
@@ -46,6 +51,9 @@ class EasySplitGoRoute extends GoRoute {
     String? name,
     GlobalKey<NavigatorState>? parentNavigatorKey,
     List<GoRoute> routes = const [],
+    GoRouterRedirect? redirect,
+    ExitCallback? onExit,
+    bool caseSensitive = true,
     this.fullscreen = false,
     this.dedupe = true,
   }) : super(
@@ -53,6 +61,9 @@ class EasySplitGoRoute extends GoRoute {
           name: name,
           parentNavigatorKey: parentNavigatorKey,
           routes: routes,
+          redirect: redirect,
+          onExit: onExit,
+          caseSensitive: caseSensitive,
           pageBuilder: (context, state) {
             if (dedupe) _scheduleDedupe(context);
             return EasySplitPage(
@@ -158,3 +169,144 @@ RouteSettings _settingsOf(RouteMatchList config, RouteMatchBase match) {
 
 bool _sameSettings(RouteSettings a, RouteSettings b) =>
     a.name == b.name && a.arguments == b.arguments;
+
+/// 在一个 GoRouter 的 match 栈里查找与 [settings] 相同的分栏页面，返回其下标
+/// （没有则 -1）。
+///
+/// 供 go_router **16.3.0 及以上**的 `onEnter` 做去重判断，示例见
+/// `example/lib/main_on_enter.dart`：
+///
+/// ```dart
+/// onEnter: (context, current, next, router) {
+///   final settings = RouteSettings(
+///     name: next.matchedLocation,
+///     arguments: next.extra,
+///   );
+///   if (easySplitIsDuplicate(
+///     router.routerDelegate.currentConfiguration,
+///     settings,
+///   )) {
+///     return const Block.stop();
+///   }
+///   return const Allow();
+/// }
+/// ```
+///
+/// 判断规则与 [EasySplitGoRoute] 内置去重一致：默认「匹配位置 + extra」相同
+/// 视为同一页，可用 [EasySplitConfig.sameRoute] 覆盖；`ShellRoute` 子树不参与。
+int easySplitDuplicateIndexOf(
+  RouteMatchList configuration,
+  RouteSettings settings,
+) {
+  final bool Function(RouteSettings, RouteSettings) same =
+      EasySplit.config.sameRoute ?? _sameSettings;
+  for (var i = configuration.matches.length - 1; i >= 0; i--) {
+    final RouteMatchBase match = configuration.matches[i];
+    if (match is ShellRouteMatch) {
+      continue;
+    }
+    if (same(_settingsOf(configuration, match), settings)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/// `easySplitDuplicateIndexOf` 的布尔快捷版：命中重复且
+/// [EasySplitConfig.dedupeRepeatedRoutes] 开启时返回 true。
+///
+/// go_router 16.3+ 的 `onEnter` 里最常见的写法就是：
+///
+/// ```dart
+/// onEnter: (context, current, next, router) {
+///   final settings = RouteSettings(
+///     name: next.matchedLocation,
+///     arguments: next.extra,
+///   );
+///   if (easySplitIsDuplicate(router.routerDelegate.currentConfiguration, settings)) {
+///     return const Block.stop();
+///   }
+///   return const Allow();
+/// }
+/// ```
+bool easySplitIsDuplicate(
+  RouteMatchList configuration,
+  RouteSettings settings,
+) {
+  return EasySplit.config.dedupeRepeatedRoutes &&
+      easySplitDuplicateIndexOf(configuration, settings) >= 0;
+}
+
+/// 去重动作：若 [settings] 对应的页面已在栈内（不含刚入栈的栈顶），返回一个
+/// 「把中间页收掉、已有页面置顶」的回调；没有可收敛的页面则返回 null。
+///
+/// 用在 go_router 16.3+ 的 `onEnter` 里、配合 `Allow(then: ...)`：
+///
+/// ```dart
+/// onEnter: (context, current, next, router) {
+///   final settings = RouteSettings(
+///     name: next.matchedLocation,
+///     arguments: next.extra,
+///   );
+///   if (!easySplitIsDuplicate(router.routerDelegate.currentConfiguration, settings)) {
+///     return const Allow();
+///   }
+///   final action = easySplitDedupeAction(router, settings);
+///   return action == null ? const Block.stop() : Allow(then: action);
+/// }
+/// ```
+///
+/// 回调在导航提交之后执行：跳过栈顶的新页面，找到下面已有的同一页，把两者之间
+/// 的页面全部 `pop` 掉（原页面 state 保留）。效果与 [EasySplitGoRoute] 内置去重
+/// 一致。遵守 [EasySplitConfig.dedupeRepeatedRoutes] 与 [EasySplitConfig.sameRoute]。
+FutureOr<void> Function()? easySplitDedupeAction(
+  GoRouter router,
+  RouteSettings settings,
+) {
+  if (!EasySplit.config.dedupeRepeatedRoutes) {
+    return null;
+  }
+  final RouteMatchList configuration = router.routerDelegate.currentConfiguration;
+  if (_duplicateIndexBelowTop(configuration, settings) < 0) {
+    return null;
+  }
+  // 预期这次导航会往栈顶追加一页；回调里用它判断"确实发生了 push"。
+  var expectedLength = configuration.matches.length + 1;
+  return () async {
+    // 等导航提交（页面真正入栈）后再收敛。
+    await Future<void>.delayed(Duration.zero);
+    var guard = 0;
+    while (true) {
+      final RouteMatchList config = router.routerDelegate.currentConfiguration;
+      // 没有真的追加页面（例如 pop 后 go_router 重新解析当前地址），不处理。
+      if (config.matches.length != expectedLength) {
+        return;
+      }
+      final int index = _duplicateIndexBelowTop(config, settings);
+      if (index < 0 || config.matches.length <= index + 1 || !router.canPop()) {
+        return;
+      }
+      router.pop();
+      expectedLength--;
+      if (guard++ >= 32) {
+        return;
+      }
+    }
+  };
+}
+
+/// 在栈内查找 [settings] 对应的页面，**跳过栈顶**（刚 push 进来的新页面）。
+int _duplicateIndexBelowTop(RouteMatchList configuration, RouteSettings settings) {
+  final bool Function(RouteSettings, RouteSettings) sameRoute =
+      EasySplit.config.sameRoute ?? _sameSettings;
+  for (var i = configuration.matches.length - 2; i >= 0; i--) {
+    final RouteMatchBase match = configuration.matches[i];
+    if (match is ShellRouteMatch) {
+      continue;
+    }
+    if (sameRoute(_settingsOf(configuration, match), settings)) {
+      return i;
+    }
+  }
+  return -1;
+}

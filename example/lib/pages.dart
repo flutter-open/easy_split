@@ -64,6 +64,174 @@ const kDemoItems = [
 ];
 
 // ---------------------------------------------------------------------------
+// 0. 模拟登录（纯内存态，重启即失效；真实项目换成自己的登录服务即可）
+// ---------------------------------------------------------------------------
+
+/// 演示用的登录态：null = 未登录，非 null = 当前登录用户名。
+class DemoAuth {
+  DemoAuth._();
+
+  static final ValueNotifier<String?> currentUser = ValueNotifier<String?>(null);
+
+  static bool get isLoggedIn => currentUser.value != null;
+
+  static void login([String name = '演示用户']) => currentUser.value = name;
+
+  static void logout() => currentUser.value = null;
+}
+
+/// 需要登录才能进入的页面（demo 统一在入口按钮处拦截）。
+const kProtectedRoutes = {'/detail', '/secondary', '/dialogs'};
+
+/// 未登录时先跳登录页，登录成功返回 true；已登录直接返回 true。
+Future<bool> ensureLoggedIn(BuildContext context) async {
+  if (DemoAuth.isLoggedIn) return true;
+  final ok = await Navigator.pushNamed<bool>(context, '/login');
+  return ok ?? false;
+}
+
+/// 首页按钮统一走这里：先登录，登录成功后再跳目标页。
+Future<void> openProtected(
+  BuildContext context,
+  String route, {
+  Object? arguments,
+}) async {
+  if (kProtectedRoutes.contains(route)) {
+    if (!await ensureLoggedIn(context)) return;
+    if (!context.mounted) return;
+  }
+  await Navigator.pushNamed(context, route, arguments: arguments);
+}
+
+/// 登录页（模拟）：入口处把 '/login' 放进 fullscreenRoutes，宽屏也全屏展示。
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _phone = TextEditingController(text: '138 0000 8888');
+  final _code = TextEditingController(text: '8888');
+  bool _agree = true;
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    DemoAuth.login();
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('登录'),
+        leading: IconButton(
+          tooltip: '关闭',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context, false),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+          children: [
+            Center(
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      theme.colorScheme.primary,
+                      theme.colorScheme.tertiary,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: const Icon(
+                  Icons.splitscreen_outlined,
+                  size: 44,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '登录后继续',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '这是演示用的模拟登录，不会真的发请求；登录后才能查看详情、二级页和弹窗示例。',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.hintColor,
+              ),
+            ),
+            const SizedBox(height: 28),
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: '手机号',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone_iphone),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _code,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '验证码',
+                helperText: '演示用，随便填',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.sms_outlined),
+              ),
+            ),
+            CheckboxListTile(
+              value: _agree,
+              onChanged: (value) => setState(() => _agree = value ?? false),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              title: const Text('已阅读并同意《演示用户协议》'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _agree ? _submit : null,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: const Text('模拟登录'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('暂不登录，先逛逛'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 1. 广告页（全屏，不参与分栏）
 // ---------------------------------------------------------------------------
 
@@ -217,68 +385,325 @@ class HomePage extends StatelessWidget {
           IconButton(
             tooltip: '系统弹窗大全',
             icon: const Icon(Icons.widgets_outlined),
-            onPressed: () => Navigator.pushNamed(context, '/dialogs'),
+            onPressed: () => openProtected(context, '/dialogs'),
           ),
+          const _LoginButton(),
+          const SizedBox(width: 4),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          // —— 分屏控制卡片 ——
-          _SplitControlCard(title: title),
-          const SizedBox(height: 16),
-          // —— 弹窗入口 ——
-          Card(
-            elevation: 0,
-            color: theme.colorScheme.surfaceContainerHighest,
-            child: ListTile(
-              leading: Icon(
-                Icons.widgets_outlined,
-                color: Colors.pink.shade400,
-              ),
-              title: const Text('系统弹窗大全'),
-              subtitle: const Text(
-                'AlertDialog / BottomSheet / Picker / SnackBar…',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.pushNamed(context, '/dialogs'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Text(
-              '内容列表（点击 → 一级页详情）',
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: theme.hintColor,
-              ),
-            ),
-          ),
-          // —— 列表：宽屏点开进右栏，窄屏全屏 push ——
-          for (final item in kDemoItems)
-            Card(
-              elevation: 0,
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: item.color.withValues(alpha: 0.15),
-                  foregroundColor: item.color,
-                  child: Icon(item.icon, size: 22),
+      body: ValueListenableBuilder<String?>(
+        valueListenable: DemoAuth.currentUser,
+        builder: (context, user, _) {
+          final locked = user == null;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              // —— 分屏控制卡片 ——
+              _SplitControlCard(title: title),
+              const SizedBox(height: 12),
+              // —— 登录状态：未登录时所有入口先跳登录页 ——
+              _AuthCard(user: user),
+              const SizedBox(height: 12),
+              // —— 弹窗入口 ——
+              Card(
+                elevation: 0,
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.widgets_outlined,
+                    color: Colors.pink.shade400,
+                  ),
+                  title: const Text('系统弹窗大全'),
+                  subtitle: const Text(
+                    'AlertDialog / BottomSheet / Picker / SnackBar…',
+                  ),
+                  trailing: Icon(
+                    locked ? Icons.lock_outline : Icons.chevron_right,
+                  ),
+                  onTap: () => openProtected(context, '/dialogs'),
                 ),
-                title: Text(item.title),
-                subtitle: Text(item.subtitle, maxLines: 1),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () =>
-                    Navigator.pushNamed(context, '/detail', arguments: item),
               ),
-            ),
-        ],
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 8,
+                ),
+                child: Text(
+                  locked ? '内容列表（未登录，点击先去登录）' : '内容列表（点击 → 一级页详情）',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.hintColor,
+                  ),
+                ),
+              ),
+              // —— 列表：宽屏点开进右栏，窄屏全屏 push ——
+              for (final item in kDemoItems)
+                Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: item.color.withValues(alpha: 0.15),
+                      foregroundColor: item.color,
+                      child: Icon(item.icon, size: 22),
+                    ),
+                    title: Text(item.title),
+                    subtitle: Text(item.subtitle, maxLines: 1),
+                    trailing: Icon(
+                      locked ? Icons.lock_outline : Icons.chevron_right,
+                      size: 20,
+                    ),
+                    onTap: () =>
+                        openProtected(context, '/detail', arguments: item),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// 「开始分屏 / 停止分屏」：直接改 EasySplit.enabled（ValueNotifier，即时生效）
+/// 右上角登录 / 退出按钮：登录态变化时自动重建。
+class _LoginButton extends StatelessWidget {
+  const _LoginButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: DemoAuth.currentUser,
+      builder: (context, user, _) {
+        if (user == null) {
+          return TextButton.icon(
+            onPressed: () async {
+              final ok = await ensureLoggedIn(context);
+              if (ok && context.mounted) {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(content: Text('登录成功，入口已解锁')),
+                  );
+              }
+            },
+            icon: const Icon(Icons.login),
+            label: const Text('登录'),
+          );
+        }
+        return TextButton.icon(
+          onPressed: () {
+            DemoAuth.logout();
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(const SnackBar(content: Text('已退出登录')));
+          },
+          icon: const Icon(Icons.logout),
+          label: Text(user),
+        );
+      },
+    );
+  }
+}
+
+/// 登录状态卡片：未登录时提示入口会先跳登录，登录后显示当前用户。
+class _AuthCard extends StatelessWidget {
+  const _AuthCard({required this.user});
+
+  final String? user;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final loggedIn = user != null;
+    return Card(
+      elevation: 0,
+      color: loggedIn
+          ? theme.colorScheme.tertiaryContainer
+          : theme.colorScheme.surfaceContainerHighest,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: loggedIn
+              ? theme.colorScheme.tertiary
+              : theme.colorScheme.outlineVariant,
+          child: Icon(loggedIn ? Icons.person : Icons.lock_outline),
+        ),
+        title: Text(loggedIn ? '已登录：$user' : '未登录（演示）'),
+        subtitle: Text(loggedIn ? '所有入口已解锁' : '点任意条目会先进入模拟登录页'),
+        trailing: loggedIn
+            ? null
+            : TextButton(
+                onPressed: () => ensureLoggedIn(context),
+                child: const Text('去登录'),
+              ),
+      ),
+    );
+  }
+}
+
+/// 演示用：自定义分栏布局（layoutDelegate）与比例，改完调用
+/// [EasySplit.updateLayout] 立即生效，路由栈不动。
+enum DemoSplitMode {
+  sideBySide('左右分栏'),
+  swapped('内容在左'),
+  vertical('上下分栏'),
+  floating('悬浮内容栏');
+
+  const DemoSplitMode(this.label);
+
+  final String label;
+}
+
+class DemoSplitLayout {
+  DemoSplitLayout._();
+
+  static const double minRatio = 0.2;
+  static const double maxRatio = 0.8;
+  static const double defaultRatio = 0.5;
+
+  /// 当前布局模式
+  static DemoSplitMode mode = DemoSplitMode.sideBySide;
+
+  static bool get isDefault =>
+      mode == DemoSplitMode.sideBySide && EasySplit.paneRatio == defaultRatio;
+
+  static void apply() {
+    EasySplit.config.layoutDelegate = switch (mode) {
+      DemoSplitMode.sideBySide => null,
+      DemoSplitMode.swapped => _swapped,
+      DemoSplitMode.vertical => _vertical,
+      DemoSplitMode.floating => _floating,
+    };
+    EasySplit.updateLayout();
+  }
+
+  static void setMode(DemoSplitMode value) {
+    mode = value;
+    apply();
+  }
+
+  static void setRatio(double ratio) {
+    EasySplit.paneRatio = ratio.clamp(minRatio, maxRatio);
+    apply();
+  }
+
+  static void reset() {
+    mode = DemoSplitMode.sideBySide;
+    EasySplit.paneRatio = defaultRatio;
+    apply();
+  }
+
+  /// 交换默认布局的左右矩形：内容栏去左边，列表去右边
+  static EasySplitLayout _swapped(BuildContext context) {
+    final layout = EasySplit.defaultLayout(context);
+    return EasySplitLayout(
+      leftRect: layout.paneRect,
+      paneRect: layout.leftRect,
+    );
+  }
+
+  /// 上下分栏：列表在上、内容栏在下，内容栏高度占 paneRatio
+  static EasySplitLayout _vertical(BuildContext context) {
+    final layout = EasySplit.defaultLayout(context);
+    final width = layout.leftRect.width + layout.paneRect.width;
+    final height = layout.leftRect.height;
+    final paneHeight = height * EasySplit.paneRatio;
+    return EasySplitLayout(
+      leftRect: Rect.fromLTWH(0, 0, width, height - paneHeight),
+      paneRect: Rect.fromLTWH(0, height - paneHeight, width, paneHeight),
+    );
+  }
+
+  /// 悬浮内容栏：右侧内容区四周留出 16 的间距
+  static EasySplitLayout _floating(BuildContext context) {
+    final layout = EasySplit.defaultLayout(context);
+    return EasySplitLayout(
+      leftRect: layout.leftRect,
+      paneRect: layout.paneRect.deflate(16),
+    );
+  }
+
+  /// 打开设置弹窗
+  static Future<void> openSettings(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final ratio = EasySplit.paneRatio;
+          final labelStyle = Theme.of(context).textTheme.labelLarge;
+          return AlertDialog(
+            title: const Text('分栏布局设置'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('布局模式', style: labelStyle),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final value in DemoSplitMode.values)
+                        ChoiceChip(
+                          label: Text(value.label),
+                          selected: mode == value,
+                          onSelected: (_) {
+                            setMode(value);
+                            setDialogState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Text('内容栏占比', style: labelStyle),
+                      const Spacer(),
+                      Text('${(ratio * 100).round()}%'),
+                    ],
+                  ),
+                  Slider(
+                    value: ratio,
+                    min: minRatio,
+                    max: maxRatio,
+                    divisions: 12,
+                    label: '${(ratio * 100).round()}%',
+                    onChanged: (value) {
+                      setRatio(value);
+                      setDialogState(() {});
+                    },
+                  ),
+                  Text(
+                    '${mode.label}：内容栏 ${(ratio * 100).round()}% · '
+                    '列表 ${((1 - ratio) * 100).round()}%',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).hintColor,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  reset();
+                  setDialogState(() {});
+                },
+                child: const Text('恢复默认'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('完成'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+/// 「开始分屏 / 停止分屏 + 分栏布局设置」：布局改动调用 EasySplit.updateLayout 即时生效
 class _SplitControlCard extends StatelessWidget {
   const _SplitControlCard({required this.title});
 
@@ -287,10 +712,16 @@ class _SplitControlCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ValueListenableBuilder<bool>(
-      valueListenable: EasySplit.config.enabled,
-      builder: (context, enabled, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        EasySplit.config.enabled,
+        EasySplit.config.layoutVersion,
+      ]),
+      builder: (context, _) {
+        final enabled = EasySplit.config.enabled.value;
         final isWide = EasySplit.isWide(context);
+        final ratio = (EasySplit.paneRatio * 100).round();
+        final modeLabel = DemoSplitLayout.mode.label;
         return Card(
           elevation: 0,
           color: theme.colorScheme.primaryContainer,
@@ -315,26 +746,46 @@ class _SplitControlCard extends StatelessWidget {
                       color: theme.colorScheme.primary,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      isWide ? '当前：宽屏（已展开）' : '当前：窄屏（折叠态）',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        isWide ? '当前：宽屏（已展开）' : '当前：窄屏（折叠态）',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  isWide ? '点击列表项，内容会显示在右侧分栏。' : '把窗口拖宽（或旋转模拟器）即可展开左右分栏。',
+                  isWide ? '点击列表项，内容会显示在分栏区。' : '把窗口拖宽（或旋转模拟器）即可展开左右分栏。',
                   style: theme.textTheme.bodySmall,
                 ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => EasySplit.enabled = !EasySplit.enabled,
-                  icon: Icon(
-                    enabled ? Icons.flip_outlined : Icons.open_in_full,
+                const SizedBox(height: 8),
+                Text(
+                  '布局：$modeLabel · 内容栏 $ratio%',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
                   ),
-                  label: Text(enabled ? '停止分屏适配' : '开始分屏适配'),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => EasySplit.enabled = !EasySplit.enabled,
+                      icon: Icon(
+                        enabled ? Icons.flip_outlined : Icons.open_in_full,
+                      ),
+                      label: Text(enabled ? '停止分屏适配' : '开始分屏适配'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => DemoSplitLayout.openSettings(context),
+                      icon: const Icon(Icons.tune),
+                      label: const Text('分栏设置'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -387,6 +838,23 @@ class DetailPage extends StatelessWidget {
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.primary,
             ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 16,
+                color: theme.hintColor,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '当前登录：${DemoAuth.currentUser.value ?? '未登录'}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.hintColor,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           for (final p in item.paragraphs) ...[

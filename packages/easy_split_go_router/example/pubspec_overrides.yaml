@@ -1,0 +1,5 @@
+# 本地开发用：easy_split / easy_split_go_router 尚未发布到 pub.dev 时走仓库内路径。
+# 该文件不会被 pub publish 发布。
+dependency_overrides:
+  easy_split:
+    path: ../../../

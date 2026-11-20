@@ -1,0 +1,64 @@
+import 'package:easy_split/easy_split.dart';
+import 'package:easy_split_example/pages.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  setUp(() {
+    EasySplit.config = EasySplitConfig()..fullscreenRoutes.add('/home');
+    DemoSplitLayout.reset();
+  });
+
+  testWidgets('分栏设置弹窗可切换自定义布局与比例', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(MaterialApp(
+      home: const EasySplitScope(child: HomePage(title: 'TEST')),
+      onGenerateRoute: EasySplit.routeAdapter({
+        '/detail': (_) => const DetailPage(),
+      }),
+    ));
+    await tester.pumpAndSettle();
+
+    Rect listRect() => tester.getRect(find.byType(Scaffold).first);
+    expect(listRect(), const Rect.fromLTWH(0, 0, 600, 800));
+
+    // 打开设置弹窗
+    await tester.tap(find.text('分栏设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('分栏布局设置'), findsOneWidget);
+
+    // 内容在左：列表与内容换边
+    await tester.tap(find.text('内容在左'));
+    await tester.pumpAndSettle();
+    expect(listRect(), const Rect.fromLTWH(600, 0, 600, 800));
+
+    // 上下分栏：列表在上（高度 800 * 50%）
+    await tester.tap(find.text('上下分栏'));
+    await tester.pumpAndSettle();
+    expect(listRect(), const Rect.fromLTWH(0, 0, 1200, 400));
+
+    // 悬浮内容栏：列表保持左半屏
+    await tester.tap(find.text('悬浮内容栏'));
+    await tester.pumpAndSettle();
+    expect(listRect(), const Rect.fromLTWH(0, 0, 600, 800));
+
+    // 拖动比例滑块
+    final before = EasySplit.paneRatio;
+    await tester.drag(find.byType(Slider), const Offset(-200, 0));
+    await tester.pumpAndSettle();
+    expect(EasySplit.paneRatio, lessThan(before));
+
+    // 恢复默认
+    await tester.tap(find.text('恢复默认'));
+    await tester.pumpAndSettle();
+    expect(DemoSplitLayout.isDefault, isTrue);
+    expect(listRect(), const Rect.fromLTWH(0, 0, 600, 800));
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('分栏布局设置'), findsNothing);
+  });
+}
