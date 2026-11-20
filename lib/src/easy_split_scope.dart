@@ -26,7 +26,22 @@ import '../easy_split.dart';
 class EasySplitScope extends StatelessWidget {
   final Widget child;
 
-  const EasySplitScope({super.key, required this.child});
+  /// 右栏空态占位页（优先于 [EasySplit.config.placeholderBuilder]）
+  ///
+  /// 不传时使用全局配置；都没配则用内置占位页。
+  final WidgetBuilder? placeholderBuilder;
+
+  const EasySplitScope({
+    super.key,
+    required this.child,
+    this.placeholderBuilder,
+  });
+
+  /// 当前生效的占位页：本 Scope 指定 > 全局配置 > 内置默认
+  WidgetBuilder get _effectivePlaceholder =>
+      placeholderBuilder ??
+      EasySplit.config.placeholderBuilder ??
+      _defaultPlaceholder;
 
   @override
   Widget build(BuildContext context) {
@@ -64,8 +79,7 @@ class EasySplitScope extends StatelessWidget {
           if (layoutBuilder != null) {
             final right = wrapPane(ColoredBox(
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: (EasySplit.config.placeholderBuilder ??
-                  _defaultPlaceholder)(context),
+              child: _effectivePlaceholder(context),
             ));
             return layoutBuilder(context, wrapPane(child), right);
           }
@@ -83,8 +97,7 @@ class EasySplitScope extends StatelessWidget {
                 ),
                 child: Padding(
                   padding: contentInsets,
-                  child: wrapPane((EasySplit.config.placeholderBuilder ??
-                      _defaultPlaceholder)(context)),
+                  child: wrapPane(_effectivePlaceholder(context)),
                 ),
               ),
             ),
@@ -119,7 +132,6 @@ class EasySplitScope extends StatelessWidget {
 /// 默认占位页
 Widget _defaultPlaceholder(BuildContext context) {
   final theme = Theme.of(context);
-  final layout = EasySplit.layoutOf(context);
   return Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -128,19 +140,6 @@ Widget _defaultPlaceholder(BuildContext context) {
         const SizedBox(height: 12),
         Text('从左侧选择内容查看详情',
             style: TextStyle(color: theme.hintColor, fontSize: 14)),
-        // TODO(debug): 布局/路由诊断，验证后移除
-        Builder(builder: (ctx) {
-          final mr = ModalRoute.of(ctx);
-          final size = MediaQuery.sizeOf(ctx);
-          return Text(
-            'size=$size pw=${EasySplit.paneWidth(ctx)}\n'
-            'left=${layout.leftRect} pane=${layout.paneRect}\n'
-            'route offstage=${mr?.offstage} isCurrent=${mr?.isCurrent} '
-            'opaque=${mr is ModalRoute<dynamic> ? mr.opaque : null}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red, fontSize: 10),
-          );
-        }),
       ],
     ),
   );

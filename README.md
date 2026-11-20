@@ -43,6 +43,31 @@ MaterialApp.router(routerConfig: routerConfig)
 
 > 方案二的 `routerConfig` 只创建一次（顶层 final / State 字段）：若放进 `build()`，每次重建都会换掉 delegate 与 Navigator，路由栈随之丢失。
 
+### 2.1 重复路由去重（默认开启）
+
+重复点同一个列表项时，不会再反复压栈，而是把栈内已有的那条置顶。
+
+| 方案 | 接入方式 |
+| --- | --- |
+| 方案二 MaterialApp.router | **自动生效**（delegate 内部拦截 `pushNamed`） |
+| 方案一 onGenerateRoute | 加一行 `navigatorObservers: [EasySplit.dedupeObserver]` |
+| 方案三 GoRouter | **自动生效**（`EasySplitGoRoute` 默认开启，可 `dedupe: false` 关闭） |
+
+"同一页面"默认按 `name + arguments` 判断，可自定义：
+
+> GoRouter 方案的 push 由框架内部的 RouteInformationProvider 处理，无法直接拦截，
+> 因此实现方式是「新页面入栈后自动收敛路由栈」：效果与另外两个方案一致（重复项置顶、
+> 中间项弹掉），页面代码仍然只写 `context.push(...)`。ShellRoute / StatefulShellRoute
+> 的子页面暂不参与去重，保持原生行为。
+
+```dart
+EasySplit.config
+  ..dedupeRepeatedRoutes = true                      // 关闭：false
+  ..sameRoute = (a, b) => a.name == b.name && ...    // 按业务 id 判断
+```
+
+> 只拦截 `Navigator.pushNamed`；`pushReplacementNamed` / `pushNamedAndRemoveUntil` / `push` 保持原生语义。
+
 ### 3. 配置：`EasySplit.config`（一层包装）
 
 ```dart
@@ -55,9 +80,40 @@ EasySplit.config
   ..layoutDelegate = (ctx) => ...  // 自定义分栏布局（左右矩形）
   ..paneDecoration = ...        // 右栏面板装饰
   ..isWideOverride = (ctx) => ...  // 自定义"展开"判定（如真机铰链）
+  ..dedupeRepeatedRoutes = true  // 重复路由置顶（默认开）
+  ..sameRoute = (a, b) => ...    // 自定义"同一页面"判定
 ```
 
 便捷存取：`EasySplit.enabled`（动态开关）、`EasySplit.paneRatio` 等。
+
+### 4. 参数透传（路由外观 / 占位页）
+
+```dart
+// 分栏路由与全屏路由的通用外观参数（与 MaterialPageRoute 对齐）
+EasySplitRoute(
+  builder: (_) => const DetailPage(),
+  maintainState: true,      // 是否保留被遮挡页面的状态
+  fullscreenDialog: false,  // 是否用全屏对话框转场
+  allowSnapshotting: true,  // 转场期间是否允许截图
+  requestFocus: null,       // 是否自动获得焦点
+  settings: const RouteSettings(name: '/detail'),
+)
+
+// Navigator.pages / GoRouter pageBuilder 场景
+EasySplitPage(
+  child: (_) => const DetailPage(), name: '/detail',
+  fullscreen: false, maintainState: true, /* ...同上 */
+)
+
+// 每个 Scope 可单独指定右栏占位（优先于全局 placeholderBuilder）
+EasySplitScope(
+  placeholderBuilder: (_) => const EmptyView(),
+  child: HomePage(),
+)
+```
+
+MaterialApp.router 方案还可透传内部 Navigator 参数：
+`easySplitNativeRouterConfig(home:..., pageBuilders:..., observers: [...], onUnknownRoute: ...)`。
 
 ## 目录结构
 
@@ -66,7 +122,8 @@ lib/easy_split.dart                  EasySplitConfig（配置一层包装）+ �
 lib/src/easy_split_pane_route.dart  EasySplitRoute / EasySplitPage
 lib/src/easy_split_scope.dart       EasySplitScope 分栏容器
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate（MaterialApp.router 接入）
-test/                                15 个行为测试（分栏手势、路由接入两条线）
+lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRoute 去重，一行接入）
+test/                                31 个行为测试（分栏手势、路由接入、去重与参数透传）
 example/                             三种路由方案 demo（独立入口，按需运行）
   └─ lib/main.dart                   方案一：MaterialApp · onGenerateRoute 拦截器
   └─ lib/main_1.dart                 方案二：MaterialApp.router · RouterDelegate

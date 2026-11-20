@@ -2,10 +2,12 @@ import 'dart:ui' show DisplayFeatureType, PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 
+import 'src/easy_split_dedupe_observer.dart';
 import 'src/easy_split_pane_route.dart';
 import 'src/easy_split_scope.dart';
 import 'src/easy_split_router_delegate.dart';
 
+export 'src/easy_split_dedupe_observer.dart';
 export 'src/easy_split_pane_route.dart';
 export 'src/easy_split_scope.dart';
 export 'src/easy_split_router_delegate.dart';
@@ -25,6 +27,8 @@ class EasySplitConfig {
     this.isWideOverride,
     this.layoutDelegate,
     this.paneDecoration,
+    this.dedupeRepeatedRoutes = true,
+    this.sameRoute,
   })  : enabled = enabled ?? ValueNotifier<bool>(true),
         fullscreenRoutes = fullscreenRoutes ?? {};
 
@@ -73,6 +77,29 @@ class EasySplitConfig {
   /// 通常需要同时设置 `layoutDelegate`，让"骨架布局"与"路由落点"匹配
   Widget Function(BuildContext context, Widget left, Widget right)?
       layoutBuilder;
+
+  /// 重复路由去重（默认开启）
+  ///
+  /// 同一路由已在栈内时，再次 `Navigator.pushNamed` **不会重复压栈**，
+  /// 而是把栈内已有实例置顶（`popUntil` 掉它上面的路由），
+  /// 避免"左侧点同一个条目反复压栈、返回要按很多次"。
+  ///
+  /// "同一路由"默认按 `name` + `arguments` 判断（见 [sameRoute]）。
+  ///
+  /// 目前由 [EasySplitRouterDelegate]（`MaterialApp.router` 方案）实现；
+  /// `onGenerateRoute` 方案用的是框架自带的 Navigator，无法拦截 pushNamed。
+  bool dedupeRepeatedRoutes;
+
+  /// 判断两条路由是否"同一页面"（[dedupeRepeatedRoutes] 的匹配规则）
+  ///
+  /// 默认：`a.name == b.name && a.arguments == b.arguments`。
+  /// 例如详情页想按业务 id 去重：
+  /// ```dart
+  /// EasySplit.config.sameRoute = (a, b) =>
+  ///     a.name == '/detail' && (a.arguments as Item?)?.id ==
+  ///         (b.arguments as Item?)?.id;
+  /// ```
+  bool Function(RouteSettings a, RouteSettings b)? sameRoute;
 }
 
 /// EasySplit · 折叠屏/宽屏快速分栏适配引擎
@@ -134,6 +161,27 @@ class EasySplit {
   /// 右栏面板装饰
   static Decoration? get paneDecoration => config.paneDecoration;
   static set paneDecoration(Decoration? value) => config.paneDecoration = value;
+
+  /// 重复路由去重开关（默认开启，见 [EasySplitConfig.dedupeRepeatedRoutes]）
+  static bool get dedupeRepeatedRoutes => config.dedupeRepeatedRoutes;
+  static set dedupeRepeatedRoutes(bool value) =>
+      config.dedupeRepeatedRoutes = value;
+
+  /// 重复路由匹配规则（默认 name + arguments 相同）
+  static bool Function(RouteSettings a, RouteSettings b)? get sameRoute =>
+      config.sameRoute;
+  static set sameRoute(bool Function(RouteSettings a, RouteSettings b)? value) =>
+      config.sameRoute = value;
+
+  /// 标准 Navigator 方案（`onGenerateRoute`）的一行去重接入：
+  /// ```dart
+  /// MaterialApp(
+  ///   onGenerateRoute: EasySplit.routeAdapter({...}),
+  ///   navigatorObservers: [EasySplit.dedupeObserver],
+  /// )
+  /// ```
+  /// MaterialApp.router 方案（[EasySplitRouterDelegate]）已内置，无需添加。
+  static NavigatorObserver get dedupeObserver => EasySplitDedupeObserver();
 
   // ---- 核心逻辑 ----
 

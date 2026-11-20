@@ -22,12 +22,17 @@ class EasySplitRoute<T> extends PageRoute<T>
   EasySplitRoute({
     required WidgetBuilder builder,
     super.settings,
+    super.requestFocus,
+    super.fullscreenDialog = false,
+    super.allowSnapshotting = true,
+    this.maintainState = true,
   }) : _builder = builder;
 
   final WidgetBuilder _builder;
 
+  /// 是否保留被遮挡页面的状态（默认 true，与 MaterialPageRoute 一致）
   @override
-  bool get maintainState => true;
+  final bool maintainState;
 
   @override
   bool get opaque => false;
@@ -135,6 +140,10 @@ class EasySplitPage<T> extends Page<T> {
     super.arguments,
     super.restorationId,
     this.fullscreen = false,
+    this.maintainState = true,
+    this.fullscreenDialog = false,
+    this.allowSnapshotting = true,
+    this.requestFocus,
   }) : _child = child;
 
   final WidgetBuilder _child;
@@ -142,21 +151,42 @@ class EasySplitPage<T> extends Page<T> {
   /// true = 任何宽度都全屏（原生 MaterialPageRoute）
   final bool fullscreen;
 
+  /// 是否保留被遮挡页面的状态（透传给底层路由，默认 true）
+  final bool maintainState;
+
+  /// 是否作为全屏对话框（影响 AppBar 返回按钮样式 / iOS 转场）
+  final bool fullscreenDialog;
+
+  /// 是否允许系统在转场期间对页面做快照（透传给底层路由，默认 true）
+  final bool allowSnapshotting;
+
+  /// 路由入栈时是否请求焦点（null = 跟随 Navigator，默认行为）
+  final bool? requestFocus;
+
   @override
   Route<T> createRoute(BuildContext context) {
     // settings 必须是 Page 自身：pages 模式的 Navigator
     // 要求 route.settings is Page（否则断言失败）
     final routeSettings = this;
     if (fullscreen || EasySplit.isFullscreen(routeSettings)) {
-      return MaterialPageRoute<T>(builder: _child, settings: routeSettings);
+      return MaterialPageRoute<T>(
+        builder: _child,
+        settings: routeSettings,
+        maintainState: maintainState,
+        fullscreenDialog: fullscreenDialog,
+        allowSnapshotting: allowSnapshotting,
+        requestFocus: requestFocus,
+      );
     }
-    return EasySplitRoute<T>(builder: _child, settings: routeSettings);
+    return EasySplitRoute<T>(
+      builder: _child,
+      settings: routeSettings,
+      maintainState: maintainState,
+      fullscreenDialog: fullscreenDialog,
+      allowSnapshotting: allowSnapshotting,
+      requestFocus: requestFocus,
+    );
   }
-}
-
-/// 默认 pane 内容包装：透明 Material
-Widget _defaultPaneWrapper(BuildContext context, Widget child) {
-  return Material(type: MaterialType.transparency, child: child);
 }
 
 /// 路由级命中裁剪盒：

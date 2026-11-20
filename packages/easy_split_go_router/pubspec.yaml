@@ -1,5 +1,5 @@
 name: easy_split_go_router
-description: EasySplit 的 GoRouter 接入适配（easySplit 扩展 / createEasySplitGoRouter）。不用 GoRouter 的项目无需引入。
+description: EasySplit 的 GoRouter 接入适配（EasySplitGoRoute：宽屏分栏 + 重复路由自动去重）。不用 GoRouter 的项目无需引入。
 version: 0.1.0
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -10,3 +10,7 @@ dependencies:
   easy_split:
     path: ../../
   go_router: ">=13.0.0 <17.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

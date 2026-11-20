@@ -12,6 +12,8 @@ import 'pages.dart';
 /// 1. 首页不是启动首路由（广告页 → replace 首页），把 '/home' 加入全屏名单，
 ///    它内部自包 EasySplitScope 自行分栏；
 /// 2. routerConfig 只创建一次（放顶层 final / State 字段）。
+///
+/// 额外收益：重复路由去重（重复点同一页面时置顶）已内置，无需额外接入。
 /// ============================================================================
 void main() {
   EasySplit.config.fullscreenRoutes.add('/home');

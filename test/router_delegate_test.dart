@@ -44,6 +44,22 @@ class _HomePage extends StatelessWidget {
                 child: const Text('GO_DETAIL'),
               ),
               TextButton(
+                onPressed: () => Navigator.pushNamed(
+                  context,
+                  '/detail',
+                  arguments: 'detail-a',
+                ),
+                child: const Text('GO_DETAIL_A'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(
+                  context,
+                  '/detail',
+                  arguments: 'detail-b',
+                ),
+                child: const Text('GO_DETAIL_B'),
+              ),
+              TextButton(
                 onPressed: () => Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/secondary',
@@ -99,9 +115,10 @@ final Map<String, WidgetBuilder> _pageBuilders = <String, WidgetBuilder>{
 
 /// 使用 `EasySplit.nativeRouterConfig(delegate:)`（需要持有 delegate）
 class _DelegateApp extends StatefulWidget {
-  const _DelegateApp({this.onDelegate});
+  const _DelegateApp({this.onDelegate, this.observers = const []});
 
   final void Function(EasySplitRouterDelegate delegate)? onDelegate;
+  final List<NavigatorObserver> observers;
 
   @override
   State<_DelegateApp> createState() => _DelegateAppState();
@@ -111,6 +128,7 @@ class _DelegateAppState extends State<_DelegateApp> {
   late final EasySplitRouterDelegate delegate = EasySplitRouterDelegate(
     home: const _AdPage(),
     pageBuilders: _pageBuilders,
+    observers: widget.observers,
   );
   late final RouterConfig<String> config =
       EasySplit.nativeRouterConfig(delegate: delegate);
@@ -166,6 +184,10 @@ Future<void> _goDetail(WidgetTester tester) async {
   await tester.tap(find.text('GO_DETAIL'));
   await tester.pumpAndSettle();
 }
+
+/// 导航栈深度（每个页面一个 Scaffold）
+int _stackDepth(WidgetTester tester) =>
+    find.byType(Scaffold).evaluate().length;
 
 void main() {
   setUp(() {
@@ -333,4 +355,201 @@ void main() {
       expect(tester.getRect(find.byType(Scaffold).last).left, 600);
     });
   });
+
+  group('重复路由去重（默认开启）', () {
+    testWidgets('栈内已有同一路由：置顶而不是重复压栈', (tester) async {
+      await _pump(tester);
+      await _goHome(tester);
+
+      // A → B → A：第三次命中的是栈内已有的 A，B 被弹出
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GO_DETAIL_B'));
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 3); // home + A + B
+
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2); // home + A（B 已弹出）
+      expect(find.text('DETAIL_ARGS:detail-a'), findsOneWidget);
+      expect(find.text('DETAIL_ARGS:detail-b'), findsNothing);
+
+      // 返回一次即可回到占位
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('DETAIL_ARGS:'), findsNothing);
+      expect(_stackDepth(tester), 1);
+    });
+
+    testWidgets('连续点击同一页面不重复压栈', (tester) async {
+      await _pump(tester);
+      await _goHome(tester);
+
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2); // home + 一条 detail
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('DETAIL_ARGS:'), findsNothing);
+      expect(_stackDepth(tester), 1);
+    });
+
+    testWidgets('自定义 sameRoute：按业务规则判定是否同一页面', (tester) async {
+      EasySplit.config.sameRoute =
+          (a, b) => a.name == '/detail' && b.name == '/detail';
+      await _pump(tester);
+      await _goHome(tester);
+
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      // 任意 /detail 都视为同一页面：B 不再压栈
+      await tester.tap(find.text('GO_DETAIL_B'));
+      await tester.pumpAndSettle();
+
+      expect(_stackDepth(tester), 2);
+      expect(find.text('DETAIL_ARGS:detail-a'), findsOneWidget);
+      expect(find.text('DETAIL_ARGS:detail-b'), findsNothing);
+    });
+
+    testWidgets('关闭去重后恢复原生重复压栈', (tester) async {
+      EasySplit.config.dedupeRepeatedRoutes = false;
+      late EasySplitRouterDelegate delegate;
+      await _pump(tester, widget: _DelegateApp(onDelegate: (d) => delegate = d));
+      await _goHome(tester);
+
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GO_DETAIL_B'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GO_DETAIL_A'));
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 4); // home + A + B + A
+
+      await delegate.popRoute();
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 3);
+
+      await delegate.popRoute();
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2);
+
+      await delegate.popRoute();
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 1);
+    });
+  });
+
+  group('重复路由去重（窄屏）', () {
+    testWidgets('窄屏同样去重', (tester) async {
+      late EasySplitRouterDelegate delegate;
+      await _pump(
+        tester,
+        size: const Size(400, 800),
+        widget: _DelegateApp(onDelegate: (d) => delegate = d),
+      );
+      await _goHome(tester);
+
+      delegate.push('/detail', arguments: 'detail-a');
+      await tester.pumpAndSettle();
+      delegate.push('/detail', arguments: 'detail-a');
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('DETAIL_ARGS:'), findsNothing);
+      expect(_stackDepth(tester), 1);
+    });
+  });
+
+  group('参数透传', () {
+    test('EasySplitRoute 透传 maintainState / fullscreenDialog / allowSnapshotting', () {
+      final route = EasySplitRoute<bool>(
+        builder: (_) => const SizedBox(),
+        maintainState: false,
+        fullscreenDialog: true,
+        allowSnapshotting: false,
+      );
+      expect(route.maintainState, isFalse);
+      expect(route.fullscreenDialog, isTrue);
+      expect(route.allowSnapshotting, isFalse);
+      expect(route.opaque, isFalse);
+    });
+
+    testWidgets('EasySplitPage.createRoute 透传参数', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      final context = tester.element(find.byType(SizedBox));
+
+      final panePage = EasySplitPage<void>(
+        child: (_) => const SizedBox(),
+        name: '/pane-param',
+        maintainState: false,
+        fullscreenDialog: true,
+        allowSnapshotting: false,
+      );
+      final paneRoute = panePage.createRoute(context);
+      expect(paneRoute, isA<EasySplitRoute<void>>());
+      final route = paneRoute as EasySplitRoute<void>;
+      expect(route.maintainState, isFalse);
+      expect(route.fullscreenDialog, isTrue);
+      expect(route.allowSnapshotting, isFalse);
+
+      final fullPage = EasySplitPage<void>(
+        child: (_) => const SizedBox(),
+        name: '/fullscreen-param',
+        fullscreen: true,
+        maintainState: false,
+        fullscreenDialog: true,
+      );
+      final fullRoute = fullPage.createRoute(context);
+      expect(fullRoute, isA<MaterialPageRoute<void>>());
+      final materialRoute = fullRoute as MaterialPageRoute<void>;
+      expect(materialRoute.maintainState, isFalse);
+      expect(materialRoute.fullscreenDialog, isTrue);
+    });
+
+    testWidgets('EasySplitScope.placeholderBuilder 覆盖默认占位', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EasySplitScope(
+            placeholderBuilder: (_) => const Text('CUSTOM_EMPTY'),
+            child: const Scaffold(body: Center(child: Text('LEFT'))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('LEFT'), findsOneWidget);
+      expect(find.text('CUSTOM_EMPTY'), findsOneWidget);
+      expect(find.text(_placeholder), findsNothing);
+    });
+
+    testWidgets('observers 透传给内部 Navigator', (tester) async {
+      final observer = _RecordingObserver();
+      await _pump(tester, widget: _DelegateApp(observers: [observer]));
+      await _goHome(tester);
+      expect(observer.pushed, contains('/home'));
+    });
+  });
+}
+
+class _RecordingObserver extends NavigatorObserver {
+  final List<String?> pushed = <String?>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route.settings.name);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) pushed.add(newRoute.settings.name);
+  }
 }
