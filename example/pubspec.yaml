@@ -1,5 +1,5 @@
 name: easy_split_example
-description: EasySplit 折叠屏分栏适配示例：多种路由方案 demo 可切换
+description: EasySplit 原生适配示例：MaterialApp · onGenerateRoute 拦截器
 publish_to: none
 version: 0.1.0
 environment:
@@ -9,8 +9,6 @@ dependencies:
     sdk: flutter
   easy_split:
     path: ..
-  easy_split_go_router:
-    path: ../packages/easy_split_go_router
 dev_dependencies:
   flutter_test:
     sdk: flutter

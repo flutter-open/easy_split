@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'src/easy_split_pane_route.dart';
 import 'src/easy_split_scope.dart';
+import 'src/easy_split_router_delegate.dart';
 
 export 'src/easy_split_pane_route.dart';
 export 'src/easy_split_scope.dart';
+export 'src/easy_split_router_delegate.dart';
 
 /// 配置对象：所有 EasySplit 配置集中在这里（一层包装，符合 Flutter 传参习惯）
 ///
@@ -38,7 +40,16 @@ class EasySplitConfig {
   /// 右侧仅有首页时的占位页
   WidgetBuilder? placeholderBuilder;
 
-  /// 全屏路由名单：命中的路由任何宽度都走原生全屏
+  /// 全屏路由名单：命中的路由任何宽度都走原生全屏（内含 EasySplitScope 自行分栏）
+  ///
+  /// 典型场景：**首页不是启动首路由**的应用（闪屏/广告 → replace 到首页）——
+  /// 把真正的首页路由加入名单即可：
+  /// ```dart
+  /// EasySplit.config.fullscreenRoutes.addAll({'/home'});
+  /// // '/' 为闪屏页（不包 Scope），replace 到 '/home' 后：
+  /// // '/home' 作为原生 opaque 路由全屏显示，内部 EasySplitScope 自行分栏；
+  /// // 后续 '/detail' 依旧被拦截为透明分栏路由，叠加在首页之上
+  /// ```
   final Set<String> fullscreenRoutes;
 
   /// 分栏模式判定回调（可选）：自行决议什么情况算"展开"；
@@ -199,6 +210,34 @@ class EasySplit {
   static bool isFullscreen(RouteSettings settings) =>
       config.fullscreenRoutes.contains(settings.name);
 
+  /// 原生 router 模式（MaterialApp.router，无 go_router）的 RouterConfig
+  ///
+  /// ```dart
+  /// final delegate = EasySplitRouterDelegate(
+  ///   home: RootPage(),
+  ///   pageBuilders: {'/detail': (_) => DetailPage()},
+  /// );
+  /// MaterialApp.router(
+  ///   routerConfig: EasySplit.nativeRouterConfig(delegate: delegate),
+  /// )
+  /// // 页面内跳转：delegate.push('/detail')；返回：Navigator.pop
+  /// ```
+  static RouterConfig<String> nativeRouterConfig({
+    required EasySplitRouterDelegate delegate,
+    RootBackButtonDispatcher? backButtonDispatcher,
+  }) {
+    return RouterConfig<String>(
+      routerDelegate: delegate,
+      routeInformationParser: const _EasySplitRouteInformationParser(),
+      routeInformationProvider: PlatformRouteInformationProvider(
+        initialRouteInformation: const RouteInformation(location: '/'),
+      ),
+      backButtonDispatcher: backButtonDispatcher ?? RootBackButtonDispatcher(),
+    );
+  }
+
+
+
   /// 路由表适配器：产出 onGenerateRoute 钩子（MaterialApp / CupertinoApp 通用）
   ///
   /// ```dart
@@ -236,4 +275,14 @@ class EasySplitLayout {
   final Rect leftRect;
   final Rect paneRect;
   const EasySplitLayout({required this.leftRect, required this.paneRect});
+}
+
+/// 原生 router 模式的路由信息解析器（透传 location 字符串）
+class _EasySplitRouteInformationParser extends RouteInformationParser<String> {
+  const _EasySplitRouteInformationParser();
+
+  @override
+  Future<String> parseRouteInformation(RouteInformation routeInformation) async {
+    return routeInformation.uri?.toString() ?? '/';
+  }
 }

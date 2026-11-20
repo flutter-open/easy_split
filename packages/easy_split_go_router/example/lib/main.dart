@@ -1,5 +1,12 @@
+/// 方案二：GoRouter · routerConfig 零路由改动接入
+///
+/// 运行：flutter run -t lib/main.dart
+///
+/// 你的 GoRouter 保持原样（唯一区别：首页 builder 里包了 EasySplitScope），
+/// 仅在 routerConfig 处替换为 `goRouter.easySplit`，
+/// 所有路由自动完成宽屏分栏 / 折叠全屏的转换。
 import 'package:easy_split/easy_split.dart';
-import 'package:easy_split_go_router/easy_split_go_route.dart';
+import 'package:easy_split_go_router/easy_split_go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,7 +23,6 @@ void main() {
 class GoRouteApp extends StatelessWidget {
   GoRouteApp({super.key});
 
-  // 你的 GoRouter 保持原样（唯一区别：首页 builder 里包了 EasySplitScope）
   final _router = GoRouter(routes: [
     GoRoute(
       path: '/',
@@ -35,7 +41,7 @@ class GoRouteApp extends StatelessWidget {
     GoRoute(
       path: '/login',
       builder: (_, __) => const LoginPage(),
-    ), // 沉浸页：普通 GoRoute + fullscreenRoutes 名单
+    ), // 沉浸页：fullscreenRoutes 名单
   ]);
 
   @override

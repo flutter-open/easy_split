@@ -40,6 +40,7 @@ MaterialApp.router(
 EasySplit.config
   ..paneRatio = 0.45            // 左右占比
   ..fullscreenRoutes.addAll({'/login'})  // 永远全屏的沉浸页
+  ..fullscreenRoutes.addAll({'/home'})   // 首页非启动首路由时（闪屏→replace→首页）：首页加入名单，内部自行分栏
   ..placeholderBuilder = (ctx) => EmptyView()  // 右侧空态
   ..breakpoint = 600            // 宽窄断点
   ..layoutDelegate = (ctx) => ...  // 自定义分栏布局（左右矩形）

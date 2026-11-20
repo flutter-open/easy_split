@@ -1,34 +1,55 @@
-/// 方案一：MaterialApp · onGenerateRoute 拦截器
+/// 方案二：GoRouter · routerConfig 零路由改动接入
 ///
 /// 运行：flutter run -t lib/main.dart
 ///
-/// 适合：使用 MaterialApp + 命名路由（pushNamed / routes 表）的项目，
-/// 业务跳转代码零改动，拦截器自动完成宽屏分栏 / 窄屏全屏的转换。
-///
-/// 使用 GoRouter 的项目请运行 lib/main_go_route.dart（一行接入）。
+/// 你的 GoRouter 保持原样（唯一区别：首页 builder 里包了 EasySplitScope），
+/// 仅在 routerConfig 处替换为 `goRouter.easySplit`，
+/// 所有路由自动完成宽屏分栏 / 折叠全屏的转换。
 import 'package:easy_split/easy_split.dart';
+import 'package:easy_split_go_router/easy_split_go_router.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import 'demo_pages.dart';
+import 'pages/detail_page.dart';
+import 'pages/filter_page.dart';
+import 'pages/login_page.dart';
 
 void main() {
   configureEasySplit();
-  runApp(const OnGenerateRouteApp());
+  runApp(GoRouteApp());
 }
 
-class OnGenerateRouteApp extends StatelessWidget {
-  const OnGenerateRouteApp({super.key});
+class GoRouteApp extends StatelessWidget {
+  GoRouteApp({super.key});
+
+  final _router = GoRouter(routes: [
+    GoRoute(
+      path: '/',
+      builder: (_, __) => const EasySplitScope(
+        child: DemoRootPage(title: '方案二 · GoRouter'),
+      ),
+    ),
+    EasySplitGoRoute(
+      path: '/detail',
+      builder: (_, __) => const OrderDetailPage(),
+    ),
+    EasySplitGoRoute(
+      path: '/filter',
+      builder: (_, __) => const FilterPage(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (_, __) => const LoginPage(),
+    ), // 沉浸页：fullscreenRoutes 名单
+  ]);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '方案一 · onGenerateRoute 拦截器',
+    return MaterialApp.router(
+      title: '方案二 · GoRouter',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      // 接入点 1：列表页（栈底）包 EasySplitScope —— 决定谁是左栏
-      home: const EasySplitScope(
-          child: DemoRootPage(title: '方案一 · onGenerateRoute')),
-      // 接入点 2：路由表挂适配器（宽屏分栏 / 全屏名单原生）
-      onGenerateRoute: EasySplit.routeAdapter(demoRoutes()),
+      routerConfig: _router,
     );
   }
 }

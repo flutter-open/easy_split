@@ -38,16 +38,9 @@ Map<String, WidgetBuilder> demoRoutes() => {
 /// - 命名路由入口传 null（默认走 Navigator.pushNamed）
 /// - GoRouter 入口传 `() => context.push('/detail')`
 class DemoRootPage extends StatelessWidget {
-  const DemoRootPage({
-    super.key,
-    this.title = 'EasySplit Demo',
-    this.onDetail,
-    this.onLogin,
-  });
+  const DemoRootPage({super.key, this.title = 'EasySplit Demo'});
 
   final String title;
-  final void Function(int index)? onDetail;
-  final VoidCallback? onLogin;
 
   @override
   Widget build(BuildContext context) {
@@ -100,8 +93,7 @@ class DemoRootPage extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
-                onTap: onLogin ??
-                    () => Navigator.pushNamed(context, '/login'),
+                onTap: () => context.push('/login'),
               ),
             ],
           ),

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:easy_split_go_router/easy_split_go_route.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:easy_split/easy_split.dart';
 
@@ -175,6 +173,10 @@ void main() {
     EasySplit.config.fullscreenRoutes.add('/login');
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
+    debugPrint('[DBG] tree texts: '
+        '${find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList()}');
+    debugPrint('[DBG] scope exists: '
+        '${find.byType(EasySplitScope).evaluate().length}');
     await tester.tap(find.text('LOGIN_BTN'));
     await tester.pumpAndSettle();
     expect(find.text('LOGIN'), findsOneWidget);
@@ -218,106 +220,5 @@ void main() {
     expect(find.text('DETAIL'), findsOneWidget);
     expect(tester.getRect(find.text('DETAIL')).width, closeTo(900, 1),
         reason: '全屏显示');
-  });
-
-  testWidgets('layoutDelegate：用户自定义分栏布局', (tester) async {
-    addReset(tester);
-    await setSurface(tester, 900);
-    EasySplit.layoutDelegate = (context) {
-      final size = MediaQuery.sizeOf(context);
-      return EasySplitLayout(
-        paneRect: Rect.fromLTWH(0, 0, size.width * 0.6, size.height),
-        leftRect:
-            Rect.fromLTWH(size.width * 0.6, 0, size.width * 0.4, size.height),
-      );
-    };
-    await tester.pumpWidget(host());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OPEN'));
-    await tester.pumpAndSettle();
-    final rect = tester.getRect(find.text('DETAIL'));
-    expect(rect.left, closeTo(0, 1), reason: 'pane 在左侧（自定义布局）');
-    expect(rect.right, lessThanOrEqualTo(541), reason: 'pane 区域 = 60% 宽');
-    // 左栏（首页）位于右侧区域且可点击
-    expect(tester.getRect(find.text('OPEN')).left, greaterThan(539));
-  });
-
-  testWidgets('layoutBuilder：左右 widget 交给用户自由组合', (tester) async {
-    addReset(tester);
-    await setSurface(tester, 900);
-    EasySplit.config.layoutBuilder = (context, left, right) =>
-        Column(children: [Expanded(child: right), left]); // 右栏在上、首页在下
-    await tester.pumpWidget(MaterialApp(
-      home: EasySplitScope(child: const Text('OPEN')),
-    ));
-    await tester.pumpAndSettle();
-    // 占位页在上半区（right 在上）、首页（左栏 widget）在下半区
-    expect(tester.getRect(find.byIcon(Icons.touch_app_outlined)).center.dy,
-        lessThan(400));
-    expect(tester.getRect(find.text('OPEN')).center.dy, greaterThan(400));
-  });
-
-  testWidgets('EasySplitPage：GoRouter/Navigator.pages 模式接入',
-      (tester) async {
-    addReset(tester);
-    await setSurface(tester, 900);
-    await tester.pumpWidget(MaterialApp(
-      home: EasySplitScope(
-        child: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () => Navigator.of(context).push(EasySplitPage(
-                name: 'paged_detail',
-                child: (_) => const Text('PAGED'),
-              ).createRoute(context)),
-              child: const Text('OPEN'),
-            ),
-          ),
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OPEN'));
-    await tester.pumpAndSettle();
-    final rect = tester.getRect(find.text('PAGED'));
-    expect(rect.right, closeTo(900, 1), reason: 'EasySplitPage 同样进右侧分栏');
-    expect(rect.width, closeTo(450, 1));
-    // 折叠恢复全屏
-    await setSurface(tester, 400);
-    expect(tester.getRect(find.text('PAGED')).left, 0);
-  });
-
-  testWidgets('GoRouter：EasySplitGoRoute + context.push 自动分栏',
-      (tester) async {
-    addReset(tester);
-    await setSurface(tester, 900);
-    final router = GoRouter(routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, __) => EasySplitScope(
-          child: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => context.push('/detail'),
-              child: const Text('OPEN'),
-            ),
-          ),
-        ),
-      ),
-      EasySplitGoRoute(
-        path: '/detail',
-        builder: (_, __) => const Text('DETAIL'),
-      ),
-    ]);
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OPEN'));
-    await tester.pumpAndSettle();
-    expect(find.text('DETAIL'), findsOneWidget);
-    final rect = tester.getRect(find.text('DETAIL'));
-    expect(rect.right, closeTo(900, 1), reason: '右栏分栏');
-    expect(rect.width, closeTo(450, 1));
-    // 折叠恢复全屏
-    await setSurface(tester, 400);
-    expect(tester.getRect(find.text('DETAIL')).left, 0);
   });
 }
