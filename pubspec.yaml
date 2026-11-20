@@ -1,0 +1,9 @@
+name: easy_split
+description: EasySplit - 折叠屏/宽屏快速分栏适配引擎（仿鸿蒙平行视界）
+version: 0.1.0
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.13.0" # displayFeatures 需 3.13+
+dependencies:
+  flutter:
+    sdk: flutter

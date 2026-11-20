@@ -1,0 +1,19 @@
+name: easy_split_go_router_example
+description: EasySplit GoRouter 接入示例：GoRouter + EasySplitGoRoute / goRouter.easySplit
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  easy_split:
+    path: ../../..
+  easy_split_go_router:
+    path: ..
+  go_router: ">=13.0.0 <17.0.0"
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+flutter:
+  uses-material-design: true
