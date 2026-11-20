@@ -68,7 +68,6 @@ example/                       三种路由方案 demo（独立入口，按需�
 ```bash
 cd example
 flutter run -t lib/main.dart          # 方案一：onGenerateRoute 拦截器
-flutter run -t lib/main_go_route.dart # 方案二：GoRouter routerConfig
 ```
 
 右上角开关可随时关闭适配；旋转模拟器（Cmd+方向键）验证折叠/展开切换。

@@ -1,55 +1,44 @@
-/// 方案二：GoRouter · routerConfig 零路由改动接入
-///
-/// 运行：flutter run -t lib/main.dart
-///
-/// 你的 GoRouter 保持原样（唯一区别：首页 builder 里包了 EasySplitScope），
-/// 仅在 routerConfig 处替换为 `goRouter.easySplit`，
-/// 所有路由自动完成宽屏分栏 / 折叠全屏的转换。
 import 'package:easy_split/easy_split.dart';
-import 'package:easy_split_go_router/easy_split_go_router.dart';
+
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-import 'demo_pages.dart';
-import 'pages/detail_page.dart';
-import 'pages/filter_page.dart';
-import 'pages/login_page.dart';
+import 'pages.dart';
 
-void main() {
-  configureEasySplit();
-  runApp(GoRouteApp());
-}
+/// ============================================================================
+/// 方案一：MaterialApp · onGenerateRoute（不依赖 go_router）
+///
+/// 极简接线就两行：
+/// 1. 首页不是启动首路由（广告页 → replace 首页），把 '/home' 加入全屏名单，
+///    它内部自包 EasySplitScope 自行分栏；
+/// 2. onGenerateRoute 用 EasySplit.routeAdapter({...})，命中即分栏路由。
+/// ============================================================================
+void main() => runApp(const DemoApp());
 
-class GoRouteApp extends StatelessWidget {
-  GoRouteApp({super.key});
+/// 本 demo 使用的接入方式（首页标题下方展示）
+const kRouteScheme = '方案一 · onGenerateRoute（EasySplit.routeAdapter）';
 
-  final _router = GoRouter(routes: [
-    GoRoute(
-      path: '/',
-      builder: (_, __) => const EasySplitScope(
-        child: DemoRootPage(title: '方案二 · GoRouter'),
-      ),
-    ),
-    EasySplitGoRoute(
-      path: '/detail',
-      builder: (_, __) => const OrderDetailPage(),
-    ),
-    EasySplitGoRoute(
-      path: '/filter',
-      builder: (_, __) => const FilterPage(),
-    ),
-    GoRoute(
-      path: '/login',
-      builder: (_, __) => const LoginPage(),
-    ), // 沉浸页：fullscreenRoutes 名单
-  ]);
+class DemoApp extends StatelessWidget {
+  const DemoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: '方案二 · GoRouter',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      routerConfig: _router,
+    EasySplit.config.fullscreenRoutes.add('/home');
+
+    return MaterialApp(
+      title: 'EasySplit · 方案一 onGenerateRoute',
+      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      home: const AdPage(),
+      // 极简路由表：宽屏自动分栏 / 窄屏全屏；arguments 用 ModalRoute 取
+      onGenerateRoute: EasySplit.routeAdapter({
+        // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
+        '/home': (_) =>
+            EasySplitScope(child: const HomePage(title: kRouteScheme)),
+        '/detail': (_) => const DetailPage(),
+        '/secondary': (_) => const SecondaryPage(),
+        '/dialogs': (_) => const DialogsPage(),
+      }),
     );
   }
 }

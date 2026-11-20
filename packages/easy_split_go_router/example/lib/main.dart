@@ -1,54 +1,48 @@
-/// 方案二：GoRouter · routerConfig 零路由改动接入
-///
-/// 运行：flutter run -t lib/main.dart
-///
-/// 你的 GoRouter 保持原样（唯一区别：首页 builder 里包了 EasySplitScope），
-/// 仅在 routerConfig 处替换为 `goRouter.easySplit`，
-/// 所有路由自动完成宽屏分栏 / 折叠全屏的转换。
-import 'package:easy_split/easy_split.dart';
 import 'package:easy_split_go_router/easy_split_go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'demo_pages.dart';
-import 'pages/detail_page.dart';
-import 'pages/filter_page.dart';
-import 'pages/login_page.dart';
+import 'pages.dart';
 
-void main() {
-  configureEasySplit();
-  runApp(GoRouteApp());
-}
+/// ============================================================================
+/// 方案二：GoRouter · routerConfig（easy_split_go_router 一行接入）
+///
+/// 极简零配置：把普通 GoRoute 换成 EasySplitGoRoute 即可，
+/// 宽屏自动分栏 / 窄屏全屏；'/home' 作为栈底包 EasySplitScope 当左栏。
+/// ============================================================================
 
-class GoRouteApp extends StatelessWidget {
-  GoRouteApp({super.key});
-
-  final _router = GoRouter(routes: [
+/// 导航表：广告页（全屏）→ 首页（左栏）→ 一级页 → 二级页 → 弹窗大全（分栏）
+final _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    // 广告页：普通 GoRoute，永远全屏
+    GoRoute(path: '/', builder: (_, __) => const AdPage()),
+    // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
     GoRoute(
-      path: '/',
-      builder: (_, __) => const EasySplitScope(
-        child: DemoRootPage(title: '方案二 · GoRouter'),
-      ),
+      path: '/home',
+      builder: (_, __) => EasySplitScope(child: const HomePage()),
     ),
+    // 一级页：EasySplitGoRoute = 宽屏右栏 / 窄屏全屏
+    EasySplitGoRoute(path: '/detail', builder: (_, __) => const DetailPage()),
+    // 二级页
     EasySplitGoRoute(
-      path: '/detail',
-      builder: (_, __) => const OrderDetailPage(),
-    ),
+        path: '/secondary', builder: (_, __) => const SecondaryPage()),
+    // 系统弹窗大全
     EasySplitGoRoute(
-      path: '/filter',
-      builder: (_, __) => const FilterPage(),
-    ),
-    GoRoute(
-      path: '/login',
-      builder: (_, __) => const LoginPage(),
-    ), // 沉浸页：fullscreenRoutes 名单
-  ]);
+        path: '/dialogs', builder: (_, __) => const DialogsPage()),
+  ],
+);
+
+void main() => runApp(const DemoApp());
+
+class DemoApp extends StatelessWidget {
+  const DemoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: '方案二 · GoRouter',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
+      title: 'EasySplit · 方案二 GoRouter',
+      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
       routerConfig: _router,
     );
   }

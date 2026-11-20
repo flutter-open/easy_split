@@ -30,87 +30,96 @@ class EasySplitScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      // 宽屏判定统一走 EasySplit.isWide（可被 isWideOverride 自定义）
-      final isWide = EasySplit.isWide(context);
+    // 监听适配总开关：EasySplit.enabled 切换后立即生效（路由栈不动，纯表现层）
+    return ValueListenableBuilder<bool>(
+      valueListenable: EasySplit.config.enabled,
+      builder: (context, enabled, _) {
+        return LayoutBuilder(builder: (context, constraints) {
+          // 宽屏判定统一走 EasySplit.isWide（可被 isWideOverride 自定义）
+          final isWide = enabled && EasySplit.isWide(context);
 
-      // 窄屏：正常全屏路由模式（原生行为）
-      if (!isWide) {
-        return child;
-      }
+          // 窄屏：正常全屏路由模式（原生行为）
+          if (!isWide) {
+            return child;
+          }
 
-      // 宽屏：分栏模式（布局可自定义：layoutBuilder / layoutDelegate）
-      final mq = MediaQuery.of(context);
-      final contentInsets = EasySplit.paneContentInsets(context);
+          // 宽屏：分栏模式（布局可自定义：layoutBuilder / layoutDelegate）
+          final mq = MediaQuery.of(context);
+          final contentInsets = EasySplit.paneContentInsets(context);
 
-      // Material 祖先：裸内容缺 Material 会渲染异常
-      Widget wrapPane(Widget w) =>
-          Material(type: MaterialType.transparency, child: w);
+          // Material 祖先：裸内容缺 Material 会渲染异常
+          Widget wrapPane(Widget w) =>
+              Material(type: MaterialType.transparency, child: w);
 
-      // 左栏只消费自己外露边的安全区：右侧被右栏面板覆盖，
-      // 不需要再避让（否则左栏内容与右栏之间会多出一条安全区距离）。
-      // 横屏：去掉右侧；竖屏分栏（自定义布局）：去掉左右
-      final homePadding = EasySplit.removeInsets(
-        mq.padding,
-        EdgeInsets.only(right: mq.padding.right, left: mq.padding.left),
-      );
+          // 左栏只消费自己外露边的安全区：右侧被右栏面板覆盖，
+          // 不需要再避让（否则左栏内容与右栏之间会多出一条安全区距离）。
+          // 横屏：去掉右侧；竖屏分栏（自定义布局）：去掉左右
+          final homePadding = EasySplit.removeInsets(
+            mq.padding,
+            EdgeInsets.only(right: mq.padding.right, left: mq.padding.left),
+          );
 
-      // 自定义组合：左右 widget 交给用户（安全区由用户布局负责）
-      final layoutBuilder = EasySplit.config.layoutBuilder;
-      if (layoutBuilder != null) {
-        final right = wrapPane(ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: (EasySplit.config.placeholderBuilder ?? _defaultPlaceholder)(
-              context),
-        ));
-        return layoutBuilder(context, wrapPane(child), right);
-      }
-
-      final layout = EasySplit.layoutOf(context);
-      // 右栏：背景铺满右栏区域，内容避让外露边安全区
-      //（内层 MediaQuery 已扣除 contentInsets，防止 Scaffold 二次消费）
-      final right = Positioned.fromRect(
-        rect: layout.paneRect,
-        child: ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: MediaQuery(
-            data: mq.copyWith(
-              padding: EasySplit.removeInsets(mq.padding, contentInsets),
-            ),
-            child: Padding(
-              padding: contentInsets,
+          // 自定义组合：左右 widget 交给用户（安全区由用户布局负责）
+          final layoutBuilder = EasySplit.config.layoutBuilder;
+          if (layoutBuilder != null) {
+            final right = wrapPane(ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: (EasySplit.config.placeholderBuilder ??
                   _defaultPlaceholder)(context),
-            ),
-          ),
-        ),
-      );
+            ));
+            return layoutBuilder(context, wrapPane(child), right);
+          }
 
-      // 两栏按布局矩形约束摆放：
-      // 左栏 Scaffold 在自身矩形内消费安全区，与右栏天然对齐
-      return Stack(
-        children: [
-          Positioned.fromRect(
-            rect: layout.leftRect,
-            child: MediaQuery(
-              data: mq.copyWith(
-                padding: homePadding,
-                viewPadding: EasySplit.removeInsets(
-                    mq.viewPadding,
-                    EdgeInsets.only(right: mq.padding.right, left: mq.padding.left)),
+          final layout = EasySplit.layoutOf(context);
+          // 右栏：背景铺满右栏区域，内容避让外露边安全区
+          //（内层 MediaQuery 已扣除 contentInsets，防止 Scaffold 二次消费）
+          final right = Positioned.fromRect(
+            rect: layout.paneRect,
+            child: ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: MediaQuery(
+                data: mq.copyWith(
+                  padding: EasySplit.removeInsets(mq.padding, contentInsets),
+                ),
+                child: Padding(
+                  padding: contentInsets,
+                  child: wrapPane((EasySplit.config.placeholderBuilder ??
+                      _defaultPlaceholder)(context)),
+                ),
               ),
-              child: child,),
-          ),
-          right,
-        ],
-      );
-    });
+            ),
+          );
+
+          // 两栏按布局矩形约束摆放：
+          // 左栏 Scaffold 在自身矩形内消费安全区，与右栏天然对齐
+          return Stack(
+            children: [
+              Positioned.fromRect(
+                rect: layout.leftRect,
+                child: MediaQuery(
+                  data: mq.copyWith(
+                    padding: homePadding,
+                    viewPadding: EasySplit.removeInsets(
+                        mq.viewPadding,
+                        EdgeInsets.only(
+                            right: mq.padding.right, left: mq.padding.left)),
+                  ),
+                  child: child,
+                ),
+              ),
+              right,
+            ],
+          );
+        });
+      },
+    );
   }
 }
 
 /// 默认占位页
 Widget _defaultPlaceholder(BuildContext context) {
   final theme = Theme.of(context);
+  final layout = EasySplit.layoutOf(context);
   return Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -119,6 +128,19 @@ Widget _defaultPlaceholder(BuildContext context) {
         const SizedBox(height: 12),
         Text('从左侧选择内容查看详情',
             style: TextStyle(color: theme.hintColor, fontSize: 14)),
+        // TODO(debug): 布局/路由诊断，验证后移除
+        Builder(builder: (ctx) {
+          final mr = ModalRoute.of(ctx);
+          final size = MediaQuery.sizeOf(ctx);
+          return Text(
+            'size=$size pw=${EasySplit.paneWidth(ctx)}\n'
+            'left=${layout.leftRect} pane=${layout.paneRect}\n'
+            'route offstage=${mr?.offstage} isCurrent=${mr?.isCurrent} '
+            'opaque=${mr is ModalRoute<dynamic> ? mr.opaque : null}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, fontSize: 10),
+          );
+        }),
       ],
     ),
   );

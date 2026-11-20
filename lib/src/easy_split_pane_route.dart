@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../easy_split.dart';
 
@@ -28,8 +29,7 @@ class EasySplitRoute<T> extends PageRoute<T>
   bool get opaque => false;
 
   @override
-  Color? get barrierColor => null;
-
+  Color? get barrierColor => Colors.transparent;
   @override
   bool get barrierDismissible => false;
 
@@ -53,7 +53,11 @@ class EasySplitRoute<T> extends PageRoute<T>
 
   @override
   Widget buildContent(BuildContext context) {
-    return _PaneTeleport(child: _builder(context));
+    // 路由级命中裁剪：宽屏分栏时，整条路由只允许在右栏矩形内命中，
+    // 左栏区域 100% 穿透到底部路由（不受业务页面内部结构影响）
+    return _PaneHitTestScope(
+      child: _PaneTeleport(child: _builder(context)),
+    );
   }
 
   // 转场：使用当前主题/平台的 Material 转场
@@ -70,12 +74,12 @@ class EasySplitRoute<T> extends PageRoute<T>
     Widget child,
   ) {
     return Theme.of(context).pageTransitionsTheme.buildTransitions<dynamic>(
-      this,
-      context,
-      animation,
-      kAlwaysDismissedAnimation,
-      child,
-    );
+          this,
+          context,
+          animation,
+          kAlwaysDismissedAnimation,
+          child,
+        );
   }
 }
 
@@ -132,6 +136,57 @@ Widget _defaultPaneWrapper(BuildContext context, Widget child) {
   return Material(type: MaterialType.transparency, child: child);
 }
 
+/// 路由级命中裁剪盒：
+/// 宽屏分栏时，把本路由的命中测试严格限制在右栏矩形 [paneRect] 内，
+/// 矩形之外（左栏区域）直接返回 false → 点击穿透到底部路由。
+/// 这样即使业务页面内部有全屏 Material/Container，也无法挡住左栏。
+class _PaneHitTestScope extends SingleChildRenderObjectWidget {
+  const _PaneHitTestScope({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderPaneHitTest().._update(context);
+  }
+
+  @override
+  void updateRenderObject(
+      BuildContext context, covariant RenderObject renderObjectRaw) {
+    (renderObjectRaw as _RenderPaneHitTest)._update(context);
+  }
+}
+
+class _RenderPaneHitTest extends RenderProxyBox {
+  BuildContext? _context;
+
+  void _update(BuildContext context) {
+    _context = context;
+  }
+
+  /// 实时计算命中矩形：null = 全屏命中（折叠/关闭态）
+  Rect? get _paneRect {
+    final ctx = _context;
+    if (ctx == null) return null;
+    if (!EasySplit.config.enabled.value || !EasySplit.isWide(ctx)) {
+      return null;
+    }
+    return EasySplit.layoutOf(ctx).paneRect;
+  }
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    final rect = _paneRect;
+    if (rect != null) {
+      final inside = rect.contains(position);
+      debugPrint('🟦 PaneRoute hitTest pos=$position inside=$inside '
+          'rect=$rect');
+      if (!inside) {
+        return false; // 左栏区域：本路由完全不参与命中 → 穿透
+      }
+    }
+    return super.hitTest(result, position: position);
+  }
+}
+
 /// 路由内容自适应容器
 class _PaneTeleport extends StatelessWidget {
   final Widget child;
@@ -148,48 +203,50 @@ class _PaneTeleport extends StatelessWidget {
           // 折叠态：全屏（正常路由模式）
           return child;
         }
-        // 宽屏：内容渲染到右栏区域（与 EasySplitScope 共用同一布局，
-        // 支持 EasySplit.config.layoutDelegate 自定义；背景铺满、内容避让安全区）
+        // 宽屏：内容只占右栏矩形（与 EasySplitScope 共用同一布局，
+        // 支持 EasySplit.config.layoutDelegate 自定义）。
+        // 注意：这里不能铺满全屏——路由内容盒只落在右栏矩形，
+        // 左栏区域在路由树中没有任何节点，手势自然穿透到底部路由
+        final size = MediaQuery.sizeOf(context);
         final layout = EasySplit.layoutOf(context);
         final mq = MediaQuery.of(context);
-        return SizedBox.expand(
-          child: Stack(
-            children: [
-              Positioned.fromRect(
-                rect: layout.paneRect,
-                child: DecoratedBox(
-                  decoration: EasySplit.config.paneDecoration ??
-                      BoxDecoration(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        border: Border(
-                          left: BorderSide(
-                            color: Theme.of(context).dividerColor,
-                            width: 0.5,
-                          ),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.10),
-                            blurRadius: 10,
-                          ),
-                        ],
-                      ),
-                  child: MediaQuery(
-                    data: mq.copyWith(
-                      padding: EasySplit.removeInsets(
-                          mq.padding, EasySplit.paneContentInsets(context)),
-                    ),
-                    child: Padding(
-                      padding: EasySplit.paneContentInsets(context),
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: child,
+        return Padding(
+          // 整体右移：内容盒从 paneRect.left 开始
+          padding: EdgeInsets.only(left: layout.paneRect.left),
+          child: SizedBox(
+            width: layout.paneRect.width,
+            height: size.height,
+            child: DecoratedBox(
+              decoration: EasySplit.config.paneDecoration ??
+                  BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    border: Border(
+                      left: BorderSide(
+                        color: Theme.of(context).dividerColor,
+                        width: 0.5,
                       ),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.10),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+              child: MediaQuery(
+                data: mq.copyWith(
+                  padding: EasySplit.removeInsets(
+                      mq.padding, EasySplit.paneContentInsets(context)),
+                ),
+                child: Padding(
+                  padding: EasySplit.paneContentInsets(context),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: child,
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
