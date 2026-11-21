@@ -1,11 +1,13 @@
-name: Issue → WeCom
+name: Issue / PR → WeCom
 
-# 把仓库的 Issue 动态推送到企业微信群机器人。
+# 把仓库的 Issue 与 Pull Request 动态推送到企业微信群机器人。
 # 需要在仓库 Secrets 中配置 WECOM_WEBHOOK_URL（见下方注释），密钥不会写进代码库。
 
 on:
   issues:
     types: [opened, reopened, closed]
+  pull_request:
+    types: [opened, reopened, closed, ready_for_review]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -18,15 +20,14 @@ on:
 permissions:
   contents: read
   issues: read
+  pull-requests: read
 
 concurrency:
-  group: wecom-issue-${{ github.event.issue.number || 'manual' }}
+  group: wecom-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || 'manual' }}
   cancel-in-progress: false
 
 jobs:
   notify:
-    # issue_comment 也会在 PR 评论时触发，这里只处理 Issue 评论。
-    if: github.event_name != 'issue_comment' || !github.event.issue.pull_request
     runs-on: ubuntu-latest
     steps:
       - name: Send markdown to WeCom
@@ -44,9 +45,18 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_USER: ${{ github.event.issue.user.login }}
           ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
+          IS_PR_COMMENT: ${{ github.event.issue.pull_request != null }}
           COMMENT_URL: ${{ github.event.comment.html_url }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_USER: ${{ github.event.comment.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ', ') }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           INPUT_TITLE: ${{ inputs.title }}
         run: |
           set -euo pipefail
@@ -69,40 +79,75 @@ jobs:
             fi
           }
 
-          title="${INPUT_TITLE:-$ISSUE_TITLE}"
-          url="${ISSUE_URL}"
-          actor="${ISSUE_USER}"
-          body="$(flatten "${ISSUE_BODY:-}")"
-          kind="Issue 更新"
+          title="${INPUT_TITLE:-}"
+          url="https://github.com/${REPO}"
+          actor="${GITHUB_ACTOR:-workflow}"
+          body=""
+          labels=""
+          ref=""
+          kind="更新"
           color="info"
-          labels="${ISSUE_LABELS:-}"
 
           case "${EVENT_NAME}" in
             issues)
+              title="${ISSUE_TITLE}"
+              url="${ISSUE_URL}"
+              actor="${ISSUE_USER}"
+              body="$(flatten "${ISSUE_BODY:-}")"
+              labels="${ISSUE_LABELS:-}"
+              ref="${REPO}#${ISSUE_NUMBER}"
               case "${ACTION}" in
-                opened)   kind="🐛 新 Issue";     color="info" ;;
+                opened)   kind="🐛 新 Issue";      color="info" ;;
                 reopened) kind="🔄 Issue 重新打开"; color="warning" ;;
                 closed)   kind="✅ Issue 已关闭";   color="comment" ;;
               esac
               ;;
+            pull_request)
+              title="${PR_TITLE}"
+              url="${PR_URL}"
+              actor="${PR_USER}"
+              body="$(flatten "${PR_BODY:-}")"
+              labels="${PR_LABELS:-}"
+              ref="${REPO} PR #${PR_NUMBER}"
+              case "${ACTION}-${PR_MERGED}-${PR_DRAFT}" in
+                opened-true-*|reopened-true-*)
+                  kind="🚀 新 PR（已合并历史变更）"; color="info" ;;
+                closed-true-*)  kind="✅ PR 已合并";   color="info" ;;
+                closed-false-*) kind="❌ PR 已关闭";   color="warning" ;;
+                ready_for_review-*) kind="👀 PR 可评审"; color="info" ;;
+                opened-false-true|reopened-false-true)
+                  kind="📝 新 PR（草稿）"; color="comment" ;;
+                opened-*|reopened-*) kind="🚀 新 PR"; color="info" ;;
+              esac
+              ;;
             issue_comment)
-              kind="💬 Issue 新评论"
-              color="comment"
+              title="${ISSUE_TITLE}"
               url="${COMMENT_URL}"
               actor="${COMMENT_USER}"
               body="$(flatten "${COMMENT_BODY:-}")"
+              labels="${ISSUE_LABELS:-}"
+              if [ "${IS_PR_COMMENT:-false}" = "true" ]; then
+                ref="${REPO} PR #${ISSUE_NUMBER}"
+                kind="💬 PR 新评论"
+              else
+                ref="${REPO}#${ISSUE_NUMBER}"
+                kind="💬 Issue 新评论"
+              fi
+              color="comment"
               ;;
             workflow_dispatch)
+              title="${INPUT_TITLE:-EasySplit 企业微信机器人连通性测试}"
               kind="🔔 测试消息"
-              body="如果你收到这条消息，说明 EasySplit 仓库的 Issue 提醒已经配置成功。"
-              url="https://github.com/${REPO}/issues"
-              actor="${GITHUB_ACTOR:-workflow}"
+              body="如果你收到这条消息，说明 EasySplit 仓库的 Issue / PR 提醒已经配置成功。"
+              url="https://github.com/${REPO}/pulls"
+              ref="${REPO}"
+              color="info"
               ;;
           esac
 
           body="$(clip "${body}" 260)"
 
-          content="**${kind}** <font color=\"${color}\">${REPO}#${ISSUE_NUMBER:-}</font>
+          content="**${kind}** <font color=\"${color}\">${ref}</font>
           > 标题：[${title}](${url})
           > 操作者：${actor}
           > 标签：${labels:-无}
@@ -124,7 +169,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "### WeCom issue notification"
+            echo "### WeCom notification"
             echo "- event: \`${{ github.event_name }}\` / \`${{ github.event.action }}\`"
-            echo "- issue: \`${{ github.repository }}#${{ github.event.issue.number }}\`"
+            echo "- issue/PR: \`${{ github.repository }}#${{ github.event.issue.number || github.event.pull_request.number }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
