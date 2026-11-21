@@ -1,21 +1,25 @@
-# EasySplit · 折叠屏/宽屏快速分栏适配引擎
+# EasySplit - split-pane parallel view for foldables and wide screens
 
-仿鸿蒙"平行视界"的 Flutter 实现：**一个路由栈，折叠（窄屏）= 正常全屏路由模式，展开（宽屏）= 自动左右分栏**，切换纯表现层、栈完全不动。
+A Flutter implementation of the HarmonyOS "parallel view" idea: **one route stack - a folded
+(narrow) screen stays a normal full-screen app, an unfolded (wide) screen automatically splits
+into a left and a right pane.** Switching between the two only changes presentation; the route
+stack never moves.
 
-纯适配器设计：**不继承任何 App、不替换任何方法**，与 MaterialApp（含 `.router`）/ CupertinoApp / Navigator.pages 自由组合。
+Pure adapter design: it does not extend `MaterialApp`, does not replace any methods, and composes
+freely with `MaterialApp` (including `.router`), `CupertinoApp` and `Navigator.pages`.
 
-## 安装
+## Installation
 
-需要 Flutter 3.27+。
+Requires Flutter 3.27+.
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.0
+  easy_split: ^0.1.1
 ```
 
-## 接入
+## Setup
 
-### 1. 列表页（栈底）包 `EasySplitScope` —— 你自己决定谁是左栏
+### 1. Wrap the bottom (list) page in `EasySplitScope` - you decide which page is the left pane
 
 ```dart
 MaterialApp(
@@ -23,174 +27,206 @@ MaterialApp(
 )
 ```
 
-### 2. 路由接入（二选一，页面代码零改动）
+### 2. Route integration (pick one; page code stays untouched)
 
 ```dart
-// 方案一：MaterialApp / CupertinoApp · onGenerateRoute
+// Option 1: MaterialApp / CupertinoApp - onGenerateRoute
 MaterialApp(
-  home: const AdPage(),                                   // 启动首屏（全屏）
+  home: const AdPage(),                                   // first screen (full screen)
   onGenerateRoute: EasySplit.routeAdapter({
-    '/home': (_) => EasySplitScope(child: HomePage()),    // 首页自己决定谁是左栏
+    '/home': (_) => EasySplitScope(child: HomePage()),    // home chooses its own left pane
     '/detail': (_) => DetailPage(),
   }),
 )
 
-// 方案二：MaterialApp.router · RouterDelegate（纯 Flutter 实现，不引入第三方路由）
-// 页面里照旧 Navigator.pushNamed / pop / pushReplacementNamed，arguments 也从 ModalRoute 取
+// Option 2: MaterialApp.router - RouterDelegate (pure Flutter, no third-party router)
+// Pages keep using Navigator.pushNamed / pop / pushReplacementNamed, arguments via ModalRoute
 final routerConfig = easySplitNativeRouterConfig(
-  home: const AdPage(),                                   // 全屏首屏，不自动包 Scope
+  home: const AdPage(),                                   // full-screen first screen, not wrapped
   pageBuilders: {
-    '/home': (_) => EasySplitScope(child: HomePage()),    // 首页自己决定谁是左栏
+    '/home': (_) => EasySplitScope(child: HomePage()),    // home chooses its own left pane
     '/detail': (_) => DetailPage(),
   },
 );
 MaterialApp.router(routerConfig: routerConfig)
 ```
 
-> 方案二的 `routerConfig` 只创建一次（顶层 final / State 字段）：若放进 `build()`，每次重建都会换掉 delegate 与 Navigator，路由栈随之丢失。
+> Create the option-2 `routerConfig` only once (top-level `final` or a `State` field). If it is built
+> inside `build()`, every rebuild replaces the delegate and the `Navigator`, and the route stack is lost.
 
-其他路由体系（`Navigator.pages` 等）可直接用 `EasySplitPage(child: ..., name: ...)` 作为 `Page`，底层是同一套 `EasySplitRoute`。
+Other routing systems (`Navigator.pages`, etc.) can use `EasySplitPage(child: ..., name: ...)` as a
+`Page`; it is backed by the same `EasySplitRoute`.
 
-### 2.1 重复路由去重（默认开启）
+### 2.1 Duplicate-route deduplication (on by default)
 
-重复点同一个列表项时，不会再反复压栈，而是把栈内已有的那条置顶。
+Tapping the same list item repeatedly no longer pushes duplicate routes; the existing entry is
+brought to the top instead.
 
-| 方案 | 接入方式 |
+| Integration | How to enable |
 | --- | --- |
-| 方案一 onGenerateRoute | 加一行 `navigatorObservers: [EasySplit.dedupeObserver]` |
-| 方案二 MaterialApp.router | **自动生效**（delegate 内部拦截 `pushNamed`） |
+| Option 1, onGenerateRoute | Add `navigatorObservers: [EasySplit.dedupeObserver]` |
+| Option 2, MaterialApp.router | **Automatic** (the delegate intercepts `pushNamed`) |
 
-"同一页面"默认按 `name + arguments` 判断，可自定义：
-
-```dart
-EasySplit.config
-  ..dedupeRepeatedRoutes = true                      // 关闭：false
-  ..sameRoute = (a, b) => a.name == b.name && ...    // 按业务 id 判断
-```
-
-> 只拦截 `Navigator.pushNamed`；`pushReplacementNamed` / `pushNamedAndRemoveUntil` / `push` 保持原生语义。
-
-### 3. 配置：`EasySplit.config`（一层包装）
+"Same page" means the same `name + arguments` by default, and can be customized:
 
 ```dart
 EasySplit.config
-  ..paneRatio = 0.45            // 左右占比
-  ..fullscreenRoutes.addAll({'/login'})  // 永远全屏的沉浸页
-  ..fullscreenRoutes.addAll({'/home'})   // 首页非启动首路由时（闪屏→replace→首页）：首页加入名单，内部自行分栏
-  ..placeholderBuilder = (ctx) => EmptyView()  // 右侧空态
-  ..breakpoint = 600            // 宽窄断点
-  ..layoutDelegate = (ctx) => ...  // 自定义分栏布局（左右矩形）
-  ..paneDecoration = ...        // 右栏面板装饰
-  ..isWideOverride = (ctx) => ...  // 自定义"展开"判定（如真机铰链）
-  ..dedupeRepeatedRoutes = true  // 重复路由置顶（默认开）
-  ..sameRoute = (a, b) => ...    // 自定义"同一页面"判定
+  ..dedupeRepeatedRoutes = true                      // set to false to disable
+  ..sameRoute = (a, b) => a.name == b.name && ...    // match by business id
 ```
 
-便捷存取：`EasySplit.enabled`（动态开关）、`EasySplit.paneRatio` 等。
+> Only `Navigator.pushNamed` is intercepted; `pushReplacementNamed`, `pushNamedAndRemoveUntil` and
+> `push` keep their native semantics.
 
-几何相关配置（`paneRatio` / `breakpoint` / `layoutDelegate` / `layoutBuilder`）不是响应式的：
-改完调用一次 `EasySplit.updateLayout()`，已显示的分栏会立即按新布局重排（路由栈不动）：
+### 3. Configuration: `EasySplit.config` (one wrapper)
 
 ```dart
-EasySplit.paneRatio = 0.35;   // 或替换 layoutDelegate
-EasySplit.updateLayout();     // 立即重排
+EasySplit.config
+  ..paneRatio = 0.45            // left/right ratio
+  ..fullscreenRoutes.addAll({'/login'})  // immersive pages that stay full screen
+  ..fullscreenRoutes.addAll({'/home'})   // when home is not the first route (splash -> replace -> home)
+  ..placeholderBuilder = (ctx) => EmptyView()  // empty state of the right pane
+  ..breakpoint = 600            // narrow/wide breakpoint
+  ..layoutDelegate = (ctx) => ...  // custom split layout (left / right rectangles)
+  ..paneDecoration = ...        // right-pane decoration
+  ..isWideOverride = (ctx) => ...  // custom "unfolded" check (e.g. a real hinge)
+  ..dedupeRepeatedRoutes = true  // bring duplicate routes to the top (default)
+  ..sameRoute = (a, b) => ...    // custom "same page" check
 ```
 
-### 4. 参数透传（路由外观 / 占位页）
+Convenience accessors: `EasySplit.enabled` (runtime switch), `EasySplit.paneRatio`, etc.
+
+Geometry-related settings (`paneRatio`, `breakpoint`, `layoutDelegate`, `layoutBuilder`) are not
+reactive: call `EasySplit.updateLayout()` once after changing them, and the visible split re-lays
+out immediately (the route stack stays put):
 
 ```dart
-// 分栏路由与全屏路由的通用外观参数（与 MaterialPageRoute 对齐）
+EasySplit.paneRatio = 0.35;   // or replace layoutDelegate
+EasySplit.updateLayout();     // re-layout now
+```
+
+### 4. Parameter pass-through (route appearance / placeholder)
+
+```dart
+// Common appearance parameters for pane and full-screen routes (aligned with MaterialPageRoute)
 EasySplitRoute(
   builder: (_) => const DetailPage(),
-  maintainState: true,      // 是否保留被遮挡页面的状态
-  fullscreenDialog: false,  // 是否用全屏对话框转场
-  allowSnapshotting: true,  // 转场期间是否允许截图
-  requestFocus: null,       // 是否自动获得焦点
+  maintainState: true,      // keep the state of covered pages
+  fullscreenDialog: false,  // use the full-screen dialog transition
+  allowSnapshotting: true,  // allow snapshots during the transition
+  requestFocus: null,       // request focus automatically
   settings: const RouteSettings(name: '/detail'),
 )
 
-// Navigator.pages 场景
+// Navigator.pages case
 EasySplitPage(
   child: (_) => const DetailPage(), name: '/detail',
-  fullscreen: false, maintainState: true, /* ...同上 */
+  fullscreen: false, maintainState: true, /* ...same as above */
 )
 
-// 每个 Scope 可单独指定右栏占位（优先于全局 placeholderBuilder）
+// Each scope can provide its own right-pane placeholder (takes precedence over the global one)
 EasySplitScope(
   placeholderBuilder: (_) => const EmptyView(),
   child: HomePage(),
 )
 ```
 
-MaterialApp.router 方案还可透传内部 Navigator 参数：
-`easySplitNativeRouterConfig(home:..., pageBuilders:..., observers: [...], onUnknownRoute: ...)`。
+With `MaterialApp.router` you can also pass through inner `Navigator` parameters:
+`easySplitNativeRouterConfig(home: ..., pageBuilders: ..., observers: [...], onUnknownRoute: ...)`.
 
-## 目录结构
+## Project layout
 
 ```
-lib/easy_split.dart                      EasySplitConfig（配置一层包装）+ 核心 API
+lib/easy_split.dart                      EasySplitConfig (configuration wrapper) + core API
 lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
-lib/src/easy_split_scope.dart            EasySplitScope 分栏容器
-lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate（MaterialApp.router 接入）
-lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRoute 去重，一行接入）
-test/                                    35 个行为测试（分栏手势、路由接入、去重、参数透传、布局即时更新）
+lib/src/easy_split_scope.dart            EasySplitScope split container
+lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate (MaterialApp.router)
+lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver (one-line dedupe for onGenerateRoute)
+test/                                    35 behavior tests (gestures, routing, dedupe, params, live layout)
 example/
-  └─ lib/main.dart                       方案一：MaterialApp · onGenerateRoute 拦截器
-  └─ lib/main_1.dart                     方案二：MaterialApp.router · RouterDelegate
-  └─ lib/pages.dart                      两个入口共享的页面
+  `-- lib/main.dart                       Option 1: MaterialApp onGenerateRoute
+  `-- lib/main_1.dart                     Option 2: MaterialApp.router RouterDelegate
+  `-- lib/pages.dart                      Shared demo pages
 ```
 
-## 手势穿透原理（PageRoute 在分栏里怎么不添乱）
+## How gesture pass-through works
 
-分栏的二级页是一条 `opaque=false` 的真实 `PageRoute`，它天然会想「占满全屏」并接管全身手势。
-EasySplit 用三层把它关进右栏：
+A detail page inside the split is a real `PageRoute` with `opaque = false`; by nature it wants to
+fill the whole screen and take over all gestures. EasySplit confines it to the right pane in three
+layers:
 
-1. **视觉层**：`opaque=false` + `buildModalBarrier()` 返回零尺寸盒子 → 下层首页继续绘制、没有全屏遮罩。
-2. **布局层（关键）**：在 `buildTransitions` 里先把主题/平台的原生转场产出来，再整体套一层
-   `Padding + SizedBox`，把**整棵转场子树缩进 `paneRect`**。
-   `buildTransitions` 的产物在 Overlay 里拿到的始终是「全屏」约束，而框架会在这一层插入自己的
-   手势探测器——最典型的是 `CupertinoPageTransitionsBuilder` 的 iOS 侧滑返回热区
-   （`Stack[child, PositionedDirectional(start: 0, width: 20, child: Listener(...))]`，贴着路由盒子的左边）。
-   路由盒子若是全屏，热区就落在屏幕最左 = 左栏里，表现为：
+1. **Visual layer**: `opaque = false` plus a zero-size `buildModalBarrier()` - the page underneath
+   keeps painting and there is no full-screen scrim.
+2. **Layout layer (the important one)**: `buildTransitions` first produces the native theme/platform
+   transition and then wraps the whole transition subtree in `Padding + SizedBox` that shrinks it
+   into `paneRect`.
 
-   - 从**屏幕左缘**右滑 → 把右栏详情 pop 掉（左栏手势被路由劫持）
-   - 从**右栏左缘**右滑 → 毫无反应（用户直觉的位置反而失效）
+   The output of `buildTransitions` always receives full-screen constraints inside the `Overlay`,
+   and that is where the framework inserts its own gesture detectors - the most visible one being
+   the iOS back-swipe hotspot of `CupertinoPageTransitionsBuilder`
+   (`Stack[child, PositionedDirectional(start: 0, width: 20, child: Listener(...))]`, pinned to the
+   route box's left edge). With a full-screen route box the hotspot lands on the screen's left edge,
+   i.e. inside the left pane, which means:
 
-   把整条路由缩进 pane 后：热区跟着落到右栏左缘，转场动画也只在右栏内播放，
-   Cupertino 的拖拽进度按 pane 宽度换算（手势与动画 1:1 跟手）。
-   `buildContent` 里做 hitTest 裁剪是**管不到这一层**的，所以位置必须在这里定。
-3. **命中兜底**：`_PaneHitTestScope`（`RenderProxyBox.hitTest`）把局部坐标 `localToGlobal` 换算后
-   与 `paneRect` 比对，右栏之外直接返回 `false` → 指针继续向下层路由传递。
-   即使业务页面内部有 `OverflowBox` 之类越界绘制的节点，也不会挡住左栏。
+   - swiping from the **screen's left edge** pops the right-pane detail (left pane gestures hijacked)
+   - swiping from the **right pane's left edge** does nothing (the intuitive gesture fails)
 
-窄屏/竖屏（非分栏态）直接透传原生路由，行为与 `MaterialPageRoute` 完全一致。
+   Shrinking the whole route into the pane moves the hotspot to the right pane's left edge, plays the
+   transition inside the pane, and makes Cupertino's drag progress relative to the pane width
+   (gesture and animation 1:1). Clipping hit tests in `buildContent` cannot reach this layer, so the
+   position has to be fixed here.
+3. **Hit-test fallback**: `_PaneHitTestScope` (`RenderProxyBox.hitTest`) converts the local position
+   with `localToGlobal` and compares it with `paneRect`; outside the right pane it returns `false`, so
+   the pointer falls through to the layer below. Even if a page paints outside its bounds (e.g. with
+   an `OverflowBox`), it cannot block the left pane.
 
-回归测试：`test/pane_route_gesture_test.dart`（左栏点击/滚动穿透、右栏内容盒恰好落在 paneRect、
-iOS 侧滑锚定右栏左缘且不误触左栏、窄屏全屏、转场中左栏可交互、pop/push 往返）；
-`test/router_delegate_test.dart`（MaterialApp.router 宽/窄屏导航、pushNamed/pop/pushReplacementNamed/
-pushNamedAndRemoveUntil、delegate.push/pop、深链同步、去重、参数透传）；
-`test/dedupe_observer_test.dart`（onGenerateRoute 去重 observer）；
-`test/layout_update_test.dart`（改 `paneRatio` / 自定义布局后 `updateLayout` 立即重排，含上下分栏）。
+On a narrow/portrait screen (no split) the native route is passed through unchanged, exactly like a
+`MaterialPageRoute`.
 
-## 运行 Demo
+Regression coverage:
+
+- `test/pane_route_gesture_test.dart` - left-pane taps/scrolls pass through, the right-pane content
+  box equals `paneRect`, the iOS back-swipe hotspot is anchored to the right pane's left edge and does
+  not fire in the left pane, narrow screens are full screen, the left pane stays interactive during a
+  transition, pop/push round trips;
+- `test/router_delegate_test.dart` - MaterialApp.router navigation on wide/narrow screens,
+  `pushNamed`/`pop`/`pushReplacementNamed`/`pushNamedAndRemoveUntil`, `delegate.push`/`pop`, deep-link
+  sync, dedupe, parameter pass-through;
+- `test/dedupe_observer_test.dart` - the onGenerateRoute dedupe observer;
+- `test/layout_update_test.dart` - changing `paneRatio` or a custom layout re-lays out immediately via
+  `updateLayout()`, including a vertical split.
+
+## Running the demo
 
 ```bash
 cd example
-flutter run -t lib/main.dart          # 方案一：onGenerateRoute 拦截器
-flutter run -t lib/main_1.dart        # 方案二：MaterialApp.router · RouterDelegate
+flutter run -t lib/main.dart          # Option 1: onGenerateRoute
+flutter run -t lib/main_1.dart        # Option 2: MaterialApp.router RouterDelegate
 ```
 
-右上角开关可随时关闭适配；下拉可切换布局模式（自动 / 自定义 / 关闭分栏）；「分栏设置」可实时切换左右分栏 / 内容在左 / 上下分栏 / 悬浮内容栏四种布局，并调整内容栏比例（拖动即重排）；旋转模拟器（Cmd+方向键）验证折叠/展开切换。
+The switch in the top-right corner turns the adapter off at any time; the dropdown switches layout
+mode (auto / custom / split off); "Split settings" switches between side-by-side, content on the
+left, vertical and floating pane layouts and adjusts the pane ratio live (dragging re-lays out
+immediately). Rotate the simulator (Cmd + arrow keys) to check folded/unfolded switching.
 
-示例还接了演示用的登录拦截：未登录时点首页任意入口会先进入模拟登录页（`/login` 全屏、不分栏），登录成功后再进入目标页；右上角可退出登录。相关代码在 `example/lib/pages.dart` 的 `DemoAuth` / `ensureLoggedIn` / `openProtected`。
+The demo also includes a simulated login gate: while logged out, every entry on the home page first
+opens a mock login page (`/login`, full screen, never split); after logging in it continues to the
+target page. The top-right corner lets you log out. The code lives in
+`example/lib/pages.dart` (`DemoAuth`, `ensureLoggedIn`, `openProtected`).
 
-## 设计要点
+## Design notes
 
-- 路由栈只有一个 = 原生 Navigator；`EasySplitRoute` 仅 5 点不同（opaque=false、无 barrier、delegatedTransition 透传、整条路由缩进右栏、内容自适应），返回手势/系统返回/转场动画全部原生
-- 手势与命中边界：见上方「手势穿透原理」——指针与路由自带手势层都由**布局**隔离在右栏内，`hitTest` 裁剪只作兜底
-- 折叠/展开切换：路由栈不动，`EasySplitRoute` 内容在"右栏区域 ↔ 全屏"间自适应
-- 安全区方向感知：竖屏避上下、横屏避左右，旋转随 MediaQuery 自动更新
-- 铰链避让：`paneWidth` 计算扣除 `displayFeatures` 中的 hinge 区域
+- One route stack only = the native `Navigator`; `EasySplitRoute` differs in just five ways
+  (`opaque = false`, no barrier, pass-through delegated transition, the whole route shrunk into the
+  pane, adaptive content), so back gestures, system back and transitions are all native
+- Gesture and hit-test boundaries: see "How gesture pass-through works" above - pointer handling and
+  the route's own gesture layers are confined to the pane by **layout**; the hit-test clip is only a
+  fallback
+- Fold/unfold switching: the stack never moves; `EasySplitRoute` content adapts between "right-pane
+  area" and "full screen"
+- Orientation-aware safe areas: portrait avoids top/bottom, landscape avoids left/right; rotation
+  updates through `MediaQuery`
+- Hinge avoidance: `paneWidth` subtracts the hinge area from `displayFeatures`
 
 ## License
 

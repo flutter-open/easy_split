@@ -1,6 +1,6 @@
 name: easy_split
-description: EasySplit：折叠屏与平板的平行视界（双栏）适配引擎。一个路由栈，窄屏全屏、宽屏自动左右分栏，页面代码零改动，支持 onGenerateRoute、MaterialApp.router 与 Navigator.pages。
-version: 0.1.0
+description: "EasySplit: parallel-view split layout for foldables and tablets. One route stack; narrow screens stay full width, wide screens split into two panes, no page code changes."
+version: 0.1.1
 repository: https://github.com/flutter-open/easy_split
 topics:
   - foldable
@@ -10,7 +10,7 @@ topics:
   - navigation
 environment:
   sdk: ">=3.0.0 <4.0.0"
-  flutter: ">=3.27.0" # requestFocus / Page.requestFocus 透传需 3.27+
+  flutter: ">=3.27.0" # requestFocus passthrough requires Flutter 3.27+
 dependencies:
   flutter:
     sdk: flutter

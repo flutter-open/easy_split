@@ -1,21 +1,25 @@
 # easy_split_go_router
 
-[EasySplit](https://pub.dev/packages/easy_split) 的 GoRouter 适配：把普通 `GoRoute` 换成 `EasySplitGoRoute`，即可获得**宽屏自动左右分栏、窄屏全屏**，并内置**重复路由自动去重**。页面代码零改动，`context.push(...)` / `context.pop()` 照旧。
+GoRouter adapter for [EasySplit](https://pub.dev/packages/easy_split): replace a plain `GoRoute` with
+`EasySplitGoRoute` to get automatic **side-by-side split on wide screens and full screen on narrow ones**,
+with **built-in duplicate-route deduplication**. No page code changes: `context.push(...)` and
+`context.pop()` keep working as usual.
 
-- 只依赖 `easy_split` 与 `go_router`，不修改 GoRouter 的配置方式
-- 去重默认开启：栈里已有同一页面时再次 `push`，自动收敛到那一条（保留原页面状态），可全局或单条路由关闭
-- 兼容 go_router 13 ~ 16，需要 Flutter 3.27+
+- Depends only on `easy_split` and `go_router`; it does not change how you configure GoRouter.
+- Deduplication is on by default: pushing a page that is already in the stack converges to that entry and
+  keeps its state; can be disabled globally or per route.
+- Works with go_router 13 and later (tested on 16.3.0 and 18.1.4); requires Flutter 3.27+.
 
-## 安装
+## Install
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.0
-  easy_split_go_router: ^0.1.0
+  easy_split: ^0.1.1
+  easy_split_go_router: ^0.1.1
   go_router: ">=13.0.0"
 ```
 
-## 快速开始
+## Quick start
 
 ```dart
 import 'package:easy_split/easy_split.dart';
@@ -25,16 +29,17 @@ import 'package:go_router/go_router.dart';
 final router = GoRouter(
   initialLocation: '/',
   routes: [
-    // 启动首屏：普通 GoRoute，永远全屏
+    // First screen: a plain GoRoute, always full screen.
     GoRoute(path: '/', builder: (_, __) => const AdPage()),
 
-    // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
+    // Home page = left pane: wrap it in EasySplitScope explicitly, so it is
+    // obvious which page is the left pane.
     GoRoute(
       path: '/home',
       builder: (_, __) => EasySplitScope(child: const HomePage()),
     ),
 
-    // 二级页：EasySplitGoRoute = 宽屏右栏 / 窄屏全屏
+    // Secondary page: EasySplitGoRoute = right pane on wide, full screen on narrow.
     EasySplitGoRoute(path: '/detail', builder: (_, __) => const DetailPage()),
   ],
 );
@@ -42,34 +47,40 @@ final router = GoRouter(
 MaterialApp.router(routerConfig: router);
 ```
 
-首页不是启动首路由时（闪屏/广告 → `context.go('/home')`），把首页加入全屏名单，让它作为原生全屏页自己分栏：
+If the home page is not the initial route (splash/ad -> `context.go('/home')`), add it to the fullscreen
+list so it behaves as a native full-screen page and creates the panes itself:
 
 ```dart
 EasySplit.config.fullscreenRoutes.add('/home');
 ```
 
-## 重复路由去重
+## Duplicate-route deduplication
 
-默认开启：`/home → /detail(a) → /detail(b) → /detail(a)` 之后，栈里只剩 `[home, detail(a)]`，返回直接回首页，`detail(b)` 不会被重复压栈。
+On by default: after `/home -> /detail(a) -> /detail(b) -> /detail(a)` the stack only contains
+`[home, detail(a)]`; going back returns to the home page directly and `detail(b)` is not pushed twice.
 
 ```dart
-// 单条路由关闭
+// Disable for a single route.
 EasySplitGoRoute(path: '/detail', dedupe: false, builder: ...)
 
-// 全局关闭 / 自定义"同一页面"判定（与 easy_split 其他接入方式共用配置）
+// Disable globally, or customize what counts as "the same page"
+// (shared with the other easy_split integration schemes).
 EasySplit.config
   ..dedupeRepeatedRoutes = false
   ..sameRoute = (a, b) => a.name == b.name && a.arguments == b.arguments;
 ```
 
-实现方式：GoRouter 的 `push` 由框架内部的 RouteInformationProvider 处理，外部无法直接拦截，因此
-`EasySplitGoRoute` 在生成页面时检测「新页面是否已在栈内」，若命中则在下一帧前用 `router.pop()`
-把中间页收敛掉，效果与 `Navigator.pushNamed` 拦截一致，原页面 page key 不变、状态不重建。
+How it works: GoRouter handles `push` inside its own `RouteInformationProvider`, which cannot be
+intercepted from outside. `EasySplitGoRoute` therefore checks, while building the page, whether the new
+page is already in the stack; if so, it collapses the intermediate pages with `router.pop()` before the
+next frame. The result is the same as intercepting `Navigator.pushNamed`: the original page key stays and
+its state is not rebuilt.
 
-## 用 go_router 16.3+ 的 `onEnter` 自己接管去重
+## Taking over deduplication with go_router 16.3+ `onEnter`
 
-如果你的项目已经升到 go_router **16.3.0+**，可以用 `onEnter` 在页面入栈**之前**判断重复，
-并且命中时把已有页面「置顶」。判断与收敛都由库提供，不用自己写：
+If your project already uses go_router **16.3.0+**, you can use `onEnter` to detect duplicates **before**
+the page is pushed and bring the existing page **back to the top**. The library provides both the check
+and the convergence:
 
 ```dart
 GoRouter(
@@ -83,60 +94,66 @@ GoRouter(
     if (!easySplitIsDuplicate(config, settings)) {
       return const Allow();
     }
-    // 已在栈顶：直接拦掉（不再压栈）。
+    // Already on top: block the push entirely.
     final action = easySplitDedupeAction(router, settings);
     if (action == null) {
       return const Block.stop();
     }
-    // 页面在栈内但不在栈顶：先允许入栈，提交后把中间页收掉 → 已有页置顶。
+    // In the stack but not on top: allow the push, then drop the pages above
+    // the existing one, so it becomes the top page again.
     return Allow(then: action);
   },
   routes: [
-    // 去重交给 onEnter，路由本身关掉内置去重
+    // Deduplication is handled by onEnter; turn the built-in one off.
     EasySplitGoRoute(path: '/detail/:index', dedupe: false, builder: ...),
   ],
 )
 ```
 
-公开的三个函数：
+The three public helpers:
 
-- `easySplitDuplicateIndexOf(configuration, settings)`：返回栈内同一页的下标（没有则 `-1`）；
-- `easySplitIsDuplicate(configuration, settings)`：布尔快捷版，遵守
-  `EasySplit.config.dedupeRepeatedRoutes` / `sameRoute`；
-- `easySplitDedupeAction(router, settings)`：返回「收掉中间页、已有页置顶」的回调，
-  配合 `Allow(then: ...)` 使用；已在栈顶或没有重复时返回 `null`。
+- `easySplitDuplicateIndexOf(configuration, settings)`: index of the same page in the stack (`-1` if absent);
+- `easySplitIsDuplicate(configuration, settings)`: boolean shortcut honoring
+  `EasySplit.config.dedupeRepeatedRoutes` / `sameRoute`;
+- `easySplitDedupeAction(router, settings)`: callback that removes the intermediate pages and brings the
+  existing one to the top; use it with `Allow(then: ...)`. Returns `null` when the page is already on top
+  or no duplicate exists.
 
-注意：
+Notes:
 
-- 回调在导航提交之后执行，所以会有「先压栈、下一帧再收掉」的中间态；要完全没有中间态，
-  请用默认的 `dedupe: true`（由 pageBuilder 在帧末收敛，效果一致）；
-- 不要放进 `Block.then(...)` 里直接 `pop`：go_router 在解析阶段弹栈会把整个命令式栈收回栈底；
-- `onEnter` 是 GoRouter 的构造参数（不是 `GoRoute` 的），需要整个 router 一起用。
+- The callback runs after the navigation is committed, so there is a short "pushed, then removed on the
+  next frame" intermediate state. For a state with no intermediate step, use the default `dedupe: true`
+  (the page builder converges at the end of the frame, with the same result).
+- Do not call `pop` directly inside `Block.then(...)`: popping during go_router's resolution phase
+  collapses the whole imperative stack back to its root.
+- `onEnter` is a `GoRouter` constructor parameter (not a `GoRoute` one), so the router must opt in as a whole.
 
-完整可运行示例见 `example/lib/main_on_enter.dart`（`flutter run -t lib/main_on_enter.dart`，
-需要 go_router >= 16.3.0）。
+A complete runnable example lives in `example/lib/main_on_enter.dart`
+(`flutter run -t lib/main_on_enter.dart`, requires go_router >= 16.3.0).
 
-## 页面参数
+## Route parameters
 
-| 参数 | 默认 | 说明 |
+| Parameter | Default | Description |
 | --- | --- | --- |
-| `builder` | 必填 | `GoRouterWidgetBuilder`，与 `GoRoute.builder` 用法一致 |
-| `name` / `path` / `routes` / `parentNavigatorKey` | - | 透传给 `GoRoute` |
-| `fullscreen` | `false` | 该页永远全屏（不参与分栏），如登录页、设置页 |
-| `dedupe` | `true` | 是否参与重复路由去重 |
-| `redirect` / `onExit` / `caseSensitive` | - | 与 `GoRoute` 同义，原样透传；分栏页同样能做路由级登录拦截、离开确认 |
+| `builder` | required | `GoRouterWidgetBuilder`, same usage as `GoRoute.builder` |
+| `name` / `path` / `routes` / `parentNavigatorKey` | - | forwarded to `GoRoute` |
+| `fullscreen` | `false` | keep this page full screen (never split), e.g. login or settings |
+| `dedupe` | `true` | whether this route participates in deduplication |
+| `redirect` / `onExit` / `caseSensitive` | - | same meaning as on `GoRoute`, forwarded as-is; split pages support route-level guards and leave confirmation |
 
-分栏路由的外观参数（`maintainState`、`fullscreenDialog`、`allowSnapshotting`、`requestFocus`）
-由内部 `EasySplitPage` 决定，默认与 `MaterialPageRoute` 行为一致；需要自定义时可直接使用
-`EasySplitPage(child: ..., name: ..., maintainState: ...)` 作为 `GoRoute` 的 `pageBuilder`。
+The appearance parameters of a pane route (`maintainState`, `fullscreenDialog`, `allowSnapshotting`,
+`requestFocus`) come from the internal `EasySplitPage` and default to the same behavior as
+`MaterialPageRoute`. To customize them, use `EasySplitPage(child: ..., name: ..., maintainState: ...)`
+directly as the `pageBuilder` of a `GoRoute`.
 
-## 登录拦截（示例）
+## Login guard (example)
 
-登录态校验交给 GoRouter 自己的 `redirect`，页面里直接 `context.push`，不需要手写“先登录再跳转”：
+Let GoRouter's own `redirect` handle the authentication check, and call `context.push` directly from pages,
+with no hand-written "login first, then navigate" logic:
 
 ```dart
 final router = GoRouter(
-  refreshListenable: auth.currentUser, // 登录态变化立即重新解析路由
+  refreshListenable: auth.currentUser, // re-parse routes when the session changes
   redirect: (context, state) {
     if (!auth.isLoggedIn && state.matchedLocation.startsWith('/detail')) {
       return '/login?from=${Uri.encodeComponent(state.uri.toString())}';
@@ -150,29 +167,34 @@ final router = GoRouter(
 );
 ```
 
-登录页完成后用 `router.pushReplacement(from)` 把登录页换成目标页（保留登录页下面的栈）即可；
-注意 `redirect` 只能返回地址字符串，所以目标页参数要走路径参数（`/detail/:index`）而不是 `extra`，
-否则改道时会丢。
+When login completes, use `router.pushReplacement(from)` to replace the login page with the target page
+(keeping the pages below it). Note that `redirect` can only return a location string, so the target
+parameters must be path parameters (`/detail/:index`) rather than `extra`, otherwise they are lost when
+the location is rewritten.
 
-## 已知限制
+## Known limitations
 
-- `ShellRoute` / `StatefulShellRoute` 里的子页面暂不参与去重，保持原生行为。
-- 去重只处理同一次「push 新页」的场景；`context.go(...)` 的整栈替换、`context.replace(...)` 保持 GoRouter 原生语义。
+- Pages inside `ShellRoute` / `StatefulShellRoute` do not participate in deduplication yet and keep their
+  native behavior.
+- Deduplication only handles pushing a new page; `context.go(...)` (whole-stack replacement) and
+  `context.replace(...)` keep GoRouter's native semantics.
 
-## 示例与测试
+## Examples and tests
 
 ```bash
 cd example
 flutter run
 ```
 
-`example/lib/main.dart` 是完整的广告页 → 首页 → 二级页 → 弹窗大全演示，登录拦截用 GoRouter 的
-`redirect` + `refreshListenable` 实现：未登录访问 `/detail/:index`、`/secondary`、`/dialogs` 会自动改道
-`/login?from=...`，登录成功后回到原目标（见 `example/lib/main.dart` 的 `_guard` 与 `pages.dart` 的
-`DemoAuth`、`LoginPage._finish`），卡片上的「分栏设置」可实时切换左右分栏 / 内容在左 / 上下分栏 / 悬浮内容栏，并调整内容栏比例
-（核心库 `EasySplit.updateLayout()`，与路由方案无关）；
-`test/go_route_dedupe_test.dart` 覆盖宽/窄屏去重、全局关闭、自定义 `sameRoute`、单路由关闭；
-`example/test/on_enter_dedupe_test.dart` 覆盖 `onEnter` 拦截版去重。
+`example/lib/main.dart` is the full ad page -> home -> detail -> dialogs demo. The login guard uses
+GoRouter's `redirect` + `refreshListenable`: unauthenticated access to `/detail/:index`, `/secondary` or
+`/dialogs` is redirected to `/login?from=...` and, after a successful login, the user lands back on the
+original target (see `_guard` in `example/lib/main.dart` and `DemoAuth` / `LoginPage._finish` in
+`pages.dart`). The "split settings" card switches between side-by-side, content-on-the-left, stacked and
+floating layouts and adjusts the pane ratio at runtime (via `EasySplit.updateLayout()`, independent of the
+routing scheme); `test/go_route_dedupe_test.dart` covers deduplication on wide and narrow screens, the
+global switch, a custom `sameRoute` and per-route opt-out; `example/test/on_enter_dedupe_test.dart` covers
+the `onEnter` interception variant.
 
 ## License
 
