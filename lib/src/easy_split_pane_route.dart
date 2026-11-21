@@ -1,5 +1,8 @@
 import 'dart:math' as math;
 
+// Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
+// which requires Flutter 3.47; this package supports Flutter 3.27+.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -119,7 +122,7 @@ class EasySplitRoute<T> extends PageRoute<T>
 ///     routes: [
 ///       GoRoute(
 ///         path: '/',
-///         builder: (_, __) => EasySplitScope(child: RootPage()), // 左栏
+///         builder: (_, _) => EasySplitScope(child: RootPage()), // 左栏
 ///       ),
 ///       GoRoute(
 ///         path: '/detail',

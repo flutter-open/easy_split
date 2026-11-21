@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:easy_split/easy_split.dart';
+// Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
+// which requires Flutter 3.47; this package supports Flutter 3.27+.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// Demo 页面：广告页 → 首页（可开始分屏）→ 一级页 → 二级页 → 系统弹窗大全
@@ -1155,7 +1158,7 @@ class DialogsPage extends StatelessWidget {
       context: context,
       barrierDismissible: true,
       barrierLabel: '全屏对话框',
-      pageBuilder: (context, _, __) => Scaffold(
+      pageBuilder: (context, _, _) => Scaffold(
         appBar: AppBar(title: const Text('全屏对话框')),
         body: Center(
           child: Column(

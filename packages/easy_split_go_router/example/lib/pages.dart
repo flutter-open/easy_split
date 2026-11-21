@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:easy_split/easy_split.dart';
 import 'package:go_router/go_router.dart';
+// Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
+// which requires Flutter 3.47; this package supports Flutter 3.27+.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// Demo 页面：广告页 → 首页（可开始分屏）→ 一级页 → 二级页 → 系统弹窗大全

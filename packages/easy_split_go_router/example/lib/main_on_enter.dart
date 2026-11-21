@@ -1,4 +1,7 @@
 import 'package:easy_split_go_router/easy_split_go_router.dart';
+// Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
+// which requires Flutter 3.47; this package supports Flutter 3.27+.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -70,30 +73,30 @@ GoRouter createDemoRouter() {
     },
     routes: [
       // 广告页：普通 GoRoute，永远全屏
-      GoRoute(path: '/', builder: (_, __) => const AdPage()),
+      GoRoute(path: '/', builder: (_, _) => const AdPage()),
       // 首页 = 左栏：入口处显式包 EasySplitScope，一眼看到"谁是左栏"
       GoRoute(
         path: '/home',
-        builder: (_, __) => EasySplitScope(child: const HomePage()),
+        builder: (_, _) => EasySplitScope(child: const HomePage()),
       ),
       // 登录页：普通 GoRoute，任何宽度都全屏，不参与分栏
-      GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       // 一级页：EasySplitGoRoute = 宽屏右栏 / 窄屏全屏；去重交给 onEnter
       EasySplitGoRoute(
         path: '/detail/:index',
-        builder: (_, __) => const DetailPage(),
+        builder: (_, _) => const DetailPage(),
         dedupe: false,
       ),
       // 二级页
       EasySplitGoRoute(
         path: '/secondary',
-        builder: (_, __) => const SecondaryPage(),
+        builder: (_, _) => const SecondaryPage(),
         dedupe: false,
       ),
       // 系统弹窗大全
       EasySplitGoRoute(
         path: '/dialogs',
-        builder: (_, __) => const DialogsPage(),
+        builder: (_, _) => const DialogsPage(),
         dedupe: false,
       ),
     ],
