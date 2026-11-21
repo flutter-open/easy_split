@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Documentation only: the English/Chinese switch at the top of the README now uses absolute GitHub
+  links, so it is clickable on pub.dev as well as on GitHub.
+- No API or behavior changes.
+
 ## 0.1.1
 
 - Documentation only: the package description, `README.md` and `CHANGELOG.md` are now written in English

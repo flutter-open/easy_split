@@ -1,6 +1,6 @@
 name: easy_split_go_router
 description: "GoRouter adapter for EasySplit: EasySplitGoRoute turns a GoRoute into a wide-screen split pane with built-in duplicate-route deduplication."
-version: 0.1.1
+version: 0.1.2
 repository: https://github.com/flutter-open/easy_split/tree/main/packages/easy_split_go_router
 topics:
   - go-router

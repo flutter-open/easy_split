@@ -1,6 +1,6 @@
 # easy_split_go_router
 
-[English](README.md) | [简体中文](README_CN.md)
+[English](https://github.com/flutter-open/easy_split/blob/main/packages/easy_split_go_router/README.md) | [简体中文](https://github.com/flutter-open/easy_split/blob/main/packages/easy_split_go_router/README_CN.md)
 
 [EasySplit](https://pub.dev/packages/easy_split) 的 GoRouter 适配器：把普通的 `GoRoute` 换成
 `EasySplitGoRoute`，即可获得**宽屏自动左右分屏、窄屏全屏**，并**内置重复路由去重**。页面代码
@@ -14,8 +14,8 @@
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.1
-  easy_split_go_router: ^0.1.1
+  easy_split: ^0.1.2
+  easy_split_go_router: ^0.1.2
   go_router: ">=13.0.0"
 ```
 

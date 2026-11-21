@@ -1,6 +1,6 @@
 # EasySplit - 折叠屏与宽屏的左右分屏并行视图
 
-[English](README.md) | [简体中文](README_CN.md)
+[English](https://github.com/flutter-open/easy_split/blob/main/README.md) | [简体中文](https://github.com/flutter-open/easy_split/blob/main/README_CN.md)
 
 这是 HarmonyOS「平行视界」思路的 Flutter 实现：**只维护一个路由栈——折叠（窄）屏仍然是普通的
 全屏应用，展开（宽）屏则自动分成左右两个窗格。** 两种状态之间切换只改变呈现方式，路由栈本身
@@ -21,7 +21,7 @@
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.1
+  easy_split: ^0.1.2
 ```
 
 ## 接入步骤

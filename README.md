@@ -1,6 +1,6 @@
 # EasySplit - split-pane parallel view for foldables and wide screens
 
-[English](README.md) | [简体中文](README_CN.md)
+[English](https://github.com/flutter-open/easy_split/blob/main/README.md) | [简体中文](https://github.com/flutter-open/easy_split/blob/main/README_CN.md)
 
 A Flutter implementation of the HarmonyOS "parallel view" idea: **one route stack - a folded
 (narrow) screen stays a normal full-screen app, an unfolded (wide) screen automatically splits
@@ -23,7 +23,7 @@ Requires Flutter 3.27+.
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.1
+  easy_split: ^0.1.2
 ```
 
 ## Setup
