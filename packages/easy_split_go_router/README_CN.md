@@ -15,8 +15,8 @@
 ```yaml
 dependencies:
   easy_split: ^0.1.2
-  easy_split_go_router: ^0.1.2
-  go_router: ">=13.0.0"
+  easy_split_go_router: ^0.1.3
+  go_router: ">=15.0.0 <19.0.0"
 ```
 
 ## 快速开始

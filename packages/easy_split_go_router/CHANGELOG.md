@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- Fixed the two deductions on the pub.dev score page:
+  - `lib/easy_split_go_router.dart` started with a dangling library doc comment; the comment is now
+    attached to an explicit `library;` directive, which restores the static-analysis points.
+  - The `go_router` constraint is now `>=15.0.0 <19.0.0` instead of `>=13.0.0`. The `caseSensitive`
+    parameter forwarded to `GoRoute` only exists since go_router 15.0.0, so the old lower bound broke
+    pana's downgrade analysis; the upper bound keeps the package installable with the latest 18.x.
+- No API changes. The minimum supported go_router version is now 15.0.0.
+
 ## 0.1.2
 
 - Documentation only: the English/Chinese switch at the top of the README now uses absolute GitHub

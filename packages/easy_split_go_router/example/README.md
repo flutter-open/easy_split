@@ -19,7 +19,7 @@ flutter run -t lib/main_on_enter.dart   # onEnter 拦截（需要 go_router >= 1
 ```
 
 本示例的 `pubspec.yaml` 把 go_router 约束在 `>=16.3.0`（为了 `onEnter`）；
-库包本身支持 `>=13.0.0`。工作区里通过 `pubspec_overrides.yaml` 把
+库包本身支持 `>=15.0.0 <19.0.0`。工作区里通过 `pubspec_overrides.yaml` 把
 `easy_split` 指向本仓库的本地路径。
 
 宽屏（≥600 且横屏）时首页作为左栏，`/detail/:index`、`/secondary`、`/dialogs`
