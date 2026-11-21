@@ -1,5 +1,7 @@
 # EasySplit - split-pane parallel view for foldables and wide screens
 
+[English](README.md) | [简体中文](README_CN.md)
+
 A Flutter implementation of the HarmonyOS "parallel view" idea: **one route stack - a folded
 (narrow) screen stays a normal full-screen app, an unfolded (wide) screen automatically splits
 into a left and a right pane.** Switching between the two only changes presentation; the route
@@ -7,6 +9,13 @@ stack never moves.
 
 Pure adapter design: it does not extend `MaterialApp`, does not replace any methods, and composes
 freely with `MaterialApp` (including `.router`), `CupertinoApp` and `Navigator.pages`.
+
+## Demo
+
+A narrow (folded) screen stays full screen; unfold it and the same route stack splits into a left
+list and a right detail pane:
+
+![EasySplit demo - folded screen stays full screen, unfolded screen splits into two panes](https://raw.githubusercontent.com/flutter-open/resures-repository/master/docs/images/easy_split.gif)
 
 ## Installation
 
@@ -231,3 +240,12 @@ target page. The top-right corner lets you log out. The code lives in
 ## License
 
 MIT
+
+## ☕ Buy Me a Coffee
+
+If EasySplit has been helpful to you, you are welcome to buy me a coffee. Thank you for your support!
+
+| Alipay | WeChat |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/flutter-open/resures-repository/master/docs/images/ali.jpg" width="260" alt="Alipay QR code" /> | <img src="https://raw.githubusercontent.com/flutter-open/resures-repository/master/docs/images/wechat.jpg" width="260" alt="WeChat QR code" /> |
+

@@ -1,5 +1,7 @@
 # easy_split_go_router
 
+[English](README.md) | [简体中文](README_CN.md)
+
 GoRouter adapter for [EasySplit](https://pub.dev/packages/easy_split): replace a plain `GoRoute` with
 `EasySplitGoRoute` to get automatic **side-by-side split on wide screens and full screen on narrow ones**,
 with **built-in duplicate-route deduplication**. No page code changes: `context.push(...)` and
@@ -199,3 +201,11 @@ the `onEnter` interception variant.
 ## License
 
 MIT
+
+## ☕ Buy Me a Coffee
+
+If easy_split_go_router has been helpful to you, you are welcome to buy me a coffee. Thank you for your support!
+
+| Alipay | WeChat |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/flutter-open/resures-repository/master/docs/images/ali.jpg" width="260" alt="Alipay QR code" /> | <img src="https://raw.githubusercontent.com/flutter-open/resures-repository/master/docs/images/wechat.jpg" width="260" alt="WeChat QR code" /> |

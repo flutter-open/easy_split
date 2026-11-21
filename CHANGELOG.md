@@ -4,6 +4,8 @@
 
 - Documentation only: the package description, `README.md` and `CHANGELOG.md` are now written in English
   so the package follows pub.dev conventions.
+- Added a Chinese README (`README_CN.md`) with a language switcher between the English and Chinese
+  versions, and a "Buy Me a Coffee" section in both.
 - No API or behavior changes.
 
 ## 0.1.0
