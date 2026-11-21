@@ -16,3 +16,11 @@ pubspec.lock
 
 # EasySplit 本地调试产物
 .temp/
+
+# ---- ai-brain 接入产物（sync 脚本自动维护，勿手改）----
+# ai-brain 为知识库符号链接；.agents/skills 与 .joycode 内为技能/规则链接；AGENTS.md 为规则投影
+# 注：ai-brain 用无斜杠模式，符号链接才会被匹配
+ai-brain
+.agents/
+.joycode/
+AGENTS.md

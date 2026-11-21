@@ -4,9 +4,16 @@ NOTES.md
 # 本地临时目录 / IDE 文件
 .temp/
 .idea/
-.joycode/
 build/
 .DS_Store
+
+# ---- ai-brain 接入产物（sync 脚本自动维护，勿手改）----
+# ai-brain 为知识库符号链接；.agents/skills 与 .joycode 内为技能/规则链接；AGENTS.md 为规则投影
+# 注：ai-brain 用无斜杠模式，符号链接才会被匹配
+ai-brain
+.agents/
+.joycode/
+AGENTS.md
 
 # 注意：这里刻意不排除 packages/。
 # pub 会把仓库根的 ignore 规则按「仓库根相对路径」套用到子包发布上，
