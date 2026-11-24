@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- `easy_split` constraint raised to `^0.2.0` (pane-scoped `MediaQuery`, `onPaneMediaQuery`,
+  `paneMediaQuery` and the state-preserving fold/unfold fix).
+- No API changes.
+
 ## 0.1.3
 
 - Fixed the two deductions on the pub.dev score page:

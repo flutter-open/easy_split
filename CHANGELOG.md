@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.2.0
+
+### Fixed
+
+- Folding or unfolding no longer resets the pages' state. `EasySplitScope`, `_PaneFrame` and
+  `_PaneTeleport` keep an identical widget structure in narrow and wide mode (only layout
+  parameters change), so pages are reused: a tabbed home page keeps its current tab, scroll
+  offsets, text fields and counters after expanding. Custom `layoutBuilder` layouts keep their
+  state through a stable `GlobalKey`.
+- Regression tests: `test/layout_state_test.dart` (5 cases).
+
+### Added
+
+- Pane-scoped `MediaQuery`: inside the left and right panes `MediaQuery.sizeOf(context)` is the pane
+  size, orientation follows the pane and padding is already reduced by the pane's safety insets, so
+  percentage widths, grids and scaling adapt to the pane width without page code changes.
+- `EasySplit.paneMediaQuery(parent, paneRect, {insets})` to build the same data for custom layouts.
+- `EasySplitConfig.onPaneMediaQuery` callback to forward the pane size to solutions that read the
+  raw `FlutterView` instead of `MediaQuery` (e.g. ScreenUtil).
+- Regression tests: `test/pane_media_query_test.dart` (7 cases).
+
+### Changed
+
+- `EasySplit.isWide` / `layoutOf` / `paneWidth` / `paneContentInsets` still compute from the whole
+  window, so the breakpoint is never decided by the pane size. Dialogs and bottom sheets stay
+  window-sized (they live in the overlay).
+
+### Upgrade
+
+- No breaking changes; page code does not change.
+- ScreenUtil users add one line in `main()`, otherwise `.w` / `.sp` keep using the whole window:
+
+  ```dart
+  EasySplit.config.onPaneMediaQuery = (data) => ScreenUtil.configure(
+        data: data,
+        designSize: const Size(375, 812), // your design size
+        splitScreenMode: false, // late fields: pass them on the first configure()
+        minTextAdapt: false,
+      );
+  ```
+
+- If a page deliberately needs the window size, read it from your own `MediaQuery` or use
+  `EasySplit.isWide` / `layoutOf` / `paneWidth`.
+
+Problem write-ups (symptoms, root cause, regression tests): [`doc/fixes.md`](doc/fixes.md).
+
 ## 0.1.2
 
 - Documentation only: the English/Chinese switch at the top of the README now uses absolute GitHub

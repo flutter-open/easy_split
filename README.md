@@ -23,7 +23,7 @@ Requires Flutter 3.27+.
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.2
+  easy_split: ^0.2.0
 ```
 
 ## Setup

@@ -21,7 +21,7 @@
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.2
+  easy_split: ^0.2.0
 ```
 
 ## 接入步骤

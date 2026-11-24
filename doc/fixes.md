@@ -1,8 +1,7 @@
 # 问题说明与修复记录 / Issue notes and fixes
 
 本文件记录 easy_split 已修复的两个问题的症状、根因、修复方式、API 变化与回归用例。
-[`CHANGELOG.md`](../CHANGELOG.md) 只记录**已发布版本**的升级信息，发布前不写内容；
-待发布版本的升级说明见本文件「升级说明」一节。用法见 [`README.md`](../README.md) /
+[`CHANGELOG.md`](../CHANGELOG.md) 只记录**已发布版本**的信息（0.2.0）；本文件是其详细说明。用法见 [`README.md`](../README.md) /
 [`README_CN.md`](../README_CN.md)。
 
 ---
@@ -136,7 +135,7 @@ void main() {
 
 ## 升级说明 / Upgrade notes
 
-> 本节是**待发布版本**的升级说明；正式发布时再同步成 `CHANGELOG.md` 对应版本条目。
+> 本节对应 **0.2.0**（已发布版本）；`CHANGELOG.md` 的 `## 0.2.0` 条目是同一份升级信息的简版。
 
 - 破坏性变更：**无**。页面代码不需要改动。
 - 使用 ScreenUtil 的项目：在 `main()` 里加 `onPaneMediaQuery` 一行（见上），否则 `.w` / `.sp`
