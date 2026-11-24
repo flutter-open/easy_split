@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../easy_split.dart';
+import 'easy_split_window.dart';
 
 /// 宽屏 pane 路由：真·原生路由（PageRoute）
 ///
@@ -247,6 +248,10 @@ class _RenderPaneHitTest extends RenderProxyBox {
 /// 位置和尺寸必须在这一层决定：buildTransitions 的产物拿到的是全屏约束，
 /// 只有在这里把约束缩成 pane，框架插入的手势探测器（iOS 侧滑返回热区）
 /// 和转场动画才会以 pane 为坐标系 —— 见 EasySplitRoute.buildTransitions。
+///
+/// 窄屏（折叠态）同样经过 Padding + SizedBox，只是矩形为整屏：
+/// 结构恒定，展开/折叠时路由内容 element 原地复用，
+/// 首页/详情页 State、Focus、滚动位置都不会因切换而重建。
 class _PaneFrame extends StatelessWidget {
   const _PaneFrame({required this.child});
 
@@ -261,23 +266,27 @@ class _PaneFrame extends StatelessWidget {
       ]),
       builder: (context, _) {
         final enabled = EasySplit.config.enabled.value;
-        if (!(enabled && EasySplit.isWide(context))) {
-          // 折叠态：全屏（正常路由模式）
-          return child;
-        }
-        final size = MediaQuery.sizeOf(context);
-        final pane = EasySplit.layoutOf(context).paneRect;
-        return Padding(
-          padding: EdgeInsets.only(
-            left: pane.left,
-            top: pane.top,
-            right: math.max(0.0, size.width - pane.right),
-            bottom: math.max(0.0, size.height - pane.bottom),
-          ),
-          child: SizedBox(
-            width: pane.width,
-            height: pane.height,
-            child: child,
+        final mq = MediaQuery.of(context);
+        final size = mq.size;
+        final pane = enabled && EasySplit.isWide(context)
+            ? EasySplit.layoutOf(context).paneRect
+            : (Offset.zero & size);
+        // 固定整窗几何：面板内的 EasySplit.isWide / layoutOf 不能被
+        // 面板尺寸带偏（断点、左右矩形都按整窗算）
+        return EasySplitWindowMetrics(
+          mediaQuery: mq,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: pane.left,
+              top: pane.top,
+              right: math.max(0.0, size.width - pane.right),
+              bottom: math.max(0.0, size.height - pane.bottom),
+            ),
+            child: SizedBox(
+              width: pane.width,
+              height: pane.height,
+              child: child,
+            ),
           ),
         );
       },
@@ -286,6 +295,9 @@ class _PaneFrame extends StatelessWidget {
 }
 
 /// 右栏面板装饰 + 安全区处理（位置/尺寸由 [_PaneFrame] 决定）
+///
+/// 与 [_PaneFrame] 同理：窄屏也走同一套 widget 链（装饰为空、内边距为零），
+/// 仅参数不同 —— 折叠/展开不会重建路由内容。
 class _PaneTeleport extends StatelessWidget {
   final Widget child;
 
@@ -300,36 +312,30 @@ class _PaneTeleport extends StatelessWidget {
       ]),
       builder: (context, _) {
         final enabled = EasySplit.config.enabled.value;
-        final paneMode = enabled && EasySplit.isWide(context);
-        if (!paneMode) {
-          // 折叠态：全屏（正常路由模式）
-          return child;
-        }
         final mq = MediaQuery.of(context);
+        final paneMode = enabled && EasySplit.isWide(context);
+        // 窄屏：不缩进、不装饰、不再消费安全区（页面自身 Scaffold 负责）
+        final insets =
+            paneMode ? EasySplit.paneContentInsets(context) : EdgeInsets.zero;
+        // 面板内页面把面板当屏幕：MediaQuery.size = 面板内容区尺寸，
+        // 按宽度百分比/栅格写的布局不会按整窗宽度放大
+        final data = paneMode
+            ? EasySplit.paneMediaQuery(
+                mq,
+                EasySplit.layoutOf(context).paneRect,
+                insets: insets,
+              )
+            : mq;
         return DecoratedBox(
-          decoration: EasySplit.config.paneDecoration ??
-              BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border(
-                  left: BorderSide(
-                    color: Theme.of(context).dividerColor,
-                    width: 0.5,
-                  ),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.10),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-          child: MediaQuery(
-            data: mq.copyWith(
-              padding: EasySplit.removeInsets(
-                  mq.padding, EasySplit.paneContentInsets(context)),
-            ),
+          decoration: paneMode
+              ? (EasySplit.config.paneDecoration ??
+                  _defaultPaneDecoration(context))
+              : const BoxDecoration(),
+          child: EasySplitPaneMetrics(
+            data: data,
+            onData: EasySplit.config.onPaneMediaQuery,
             child: Padding(
-              padding: EasySplit.paneContentInsets(context),
+              padding: insets,
               child: Material(
                 type: MaterialType.transparency,
                 child: child,
@@ -338,6 +344,25 @@ class _PaneTeleport extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// 默认右栏装饰：背景色 + 左边框 + 阴影
+  static Decoration _defaultPaneDecoration(BuildContext context) {
+    return BoxDecoration(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      border: Border(
+        left: BorderSide(
+          color: Theme.of(context).dividerColor,
+          width: 0.5,
+        ),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.10),
+          blurRadius: 10,
+        ),
+      ],
     );
   }
 }

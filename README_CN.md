@@ -139,6 +139,59 @@ EasySplitScope(
 使用 `MaterialApp.router` 时还可以透传内部 `Navigator` 参数：
 `easySplitNativeRouterConfig(home: ..., pageBuilders: ..., observers: [...], onUnknownRoute: ...)`。
 
+### 5. 窗格内的"屏幕"就是窗格本身
+
+EasySplit 会给左右窗格分别注入**窗格自己的 `MediaQuery`**，于是窗格内的页面：
+
+- `MediaQuery.sizeOf(context)` / `MediaQuery.of(context).size` 是窗格尺寸；
+- `MediaQuery.orientationOf(context)` 跟随窗格；
+- `padding` / `viewPadding` 已扣除窗格自己避让掉的安全区。
+
+百分比宽度、栅格、间距系数、宽高比这类布局因此按窗格宽度适配，**业务页面不用改一行代码**。
+
+以下仍按整窗计算（否则分屏本身就会失效）：
+
+- `EasySplit.isWide`、`EasySplit.layoutOf`、`EasySplit.paneWidth`、
+  `EasySplit.paneContentInsets` 继续按整窗几何算，断点不会被窗格尺寸带偏；
+- 从窗格里打开的对话框 / 底部弹层仍在 overlay 里，尺寸按整窗。
+
+#### ScreenUtil
+
+ScreenUtil 不读 `MediaQuery`：`ScreenUtil.init(context)` 与 `ScreenUtilInit` 走的是
+`View.maybeOf(context)` + `MediaQueryData.fromView(view)`，永远拿到整窗。在 `main()` 里转发一次
+即可，页面零改动：
+
+```dart
+void main() {
+  EasySplit.config.onPaneMediaQuery = (data) => ScreenUtil.configure(
+        data: data,
+        designSize: const Size(375, 812), // 你的设计稿尺寸
+        splitScreenMode: false, // ScreenUtil 的 late 字段，第一次 configure
+        minTextAdapt: false,    // 必须显式传，否则面板先构建会抛 LateInitializationError
+      );
+  runApp(const App());
+}
+```
+
+注意：
+
+- 回调在窗格 build 期间同步触发，**不要在回调里 setState**；
+- ScreenUtil 是全局单例：左右窗格同时可见时，后构建的那个生效；
+- 自己调整缩放配置后，调用 `EasySplit.updateLayout()` 让可见窗格重新上报。
+
+#### 自定义布局
+
+用 `EasySplit.config.layoutBuilder` 时，窗格尺寸按实际约束反推，页面同样拿到自己的尺寸；
+需要自己换算时用 `EasySplit.paneMediaQuery`：
+
+```dart
+final data = EasySplit.paneMediaQuery(
+  MediaQuery.of(context),              // 整窗数据
+  const Rect.fromLTWH(0, 0, 600, 800), // 你的窗格矩形
+  insets: const EdgeInsets.only(top: 24),
+);
+```
+
 ## 项目结构
 
 ```
@@ -147,11 +200,16 @@ lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
 lib/src/easy_split_scope.dart            EasySplitScope 分屏容器
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate（MaterialApp.router）
 lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRoute 一行接入去重）
-test/                                    35 个行为测试（手势、路由、去重、参数、实时布局）
+lib/src/easy_split_window.dart           整窗几何 + 窗格 MediaQuery（内部实现）
+test/                                    47 个行为测试（手势、路由、去重、参数、实时布局、窗格尺寸）
+packages/easy_split_go_router/            go_router 适配包
+packages/easy_split_demo/                两个 example 入口共用的演示包
+  `-- lib/src/pages.dart                 演示页面（广告、首页、详情、弹窗大全）
+  `-- lib/src/demos.dart                 TabBar 首页 + 窗格宽度演示
+  `-- lib/src/setup.dart                 共用路由表、ScreenUtil 接入、主题
 example/
   `-- lib/main.dart                       方式一：MaterialApp onGenerateRoute
   `-- lib/main_1.dart                     方式二：MaterialApp.router RouterDelegate
-  `-- lib/pages.dart                      共享演示页面
 ```
 
 ## 手势穿透是如何实现的
@@ -207,7 +265,33 @@ flutter run -t lib/main_1.dart        # 方式二：MaterialApp.router RouterDel
 
 示例还包含一个模拟登录门禁：未登录时，首页每个入口都会先打开模拟登录页（`/login`，全屏，
 永不分屏）；登录后继续打开目标页面。右上角可以退出登录。代码位于
-`example/lib/pages.dart`（`DemoAuth`、`ensureLoggedIn`、`openProtected`）。
+`packages/easy_split_demo/lib/src/pages.dart`（`DemoAuth`、`ensureLoggedIn`、`openProtected`）。
+
+示例里还有一个底部 tabbar 形式的首页（`packages/easy_split_demo/lib/src/demos.dart` 的
+`TabsHomePage`，广告页和首页
+列表都有入口），同时也是窗格适配的走查页：
+
+- 底部 4 个 tab：计数 / 滚动 / 输入 / 宽度；
+- 折叠 ⇄ 展开后，当前 tab、计数、滚动位置、输入内容都保留；
+- **宽度** tab 展示面板尺寸 vs 整窗尺寸、100 / 50 / 25% 色块、自适应栅格和 ScreenUtil
+  （`.w` / `.sp`）换算值，全部按面板宽度计算。
+
+不需要真折叠屏：AppBar 的「折叠 / 展开」菜单通过 `EasySplit.config.isWideOverride` 强制切换，
+走的是与真机折叠完全相同的代码路径。
+
+想直接冷启动到它（截图 / CI 用），加两个 example 专属开关（两个入口文件都支持）：
+
+```bash
+cd example
+# TabBar 首页，已展开（双栏），并停在"宽度"tab
+flutter run -t lib/main.dart \
+  --dart-define=EASYSPLIT_FORCE_MODE=wide \
+  --dart-define=EASYSPLIT_START_ROUTE=/tabs-home \
+  --dart-define=EASYSPLIT_START_TAB=3
+
+# TabBar 首页，折叠态
+flutter run -t lib/main_1.dart --dart-define=EASYSPLIT_START_ROUTE=/tabs-home
+```
 
 ## 设计说明
 

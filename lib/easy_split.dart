@@ -9,6 +9,7 @@ import 'src/easy_split_dedupe_observer.dart';
 import 'src/easy_split_pane_route.dart';
 import 'src/easy_split_scope.dart';
 import 'src/easy_split_router_delegate.dart';
+import 'src/easy_split_window.dart';
 
 export 'src/easy_split_dedupe_observer.dart';
 export 'src/easy_split_pane_route.dart';
@@ -87,6 +88,32 @@ class EasySplitConfig {
   /// 通常需要同时设置 `layoutDelegate`，让"骨架布局"与"路由落点"匹配
   Widget Function(BuildContext context, Widget left, Widget right)?
       layoutBuilder;
+
+  /// 面板 MediaQuery 变更回调（可选）：把面板实际生效的 MediaQuery 同步给
+  /// **不跟随 MediaQuery 的方案**（典型：ScreenUtil）
+  ///
+  /// 面板内的 `MediaQuery.size` 已经是面板自身尺寸，页面代码不用改；
+  /// 但 ScreenUtil 5.x 的 `ScreenUtil.init(context)` 与 `ScreenUtilInit`
+  /// 走的是 `View.maybeOf(context)` + `MediaQueryData.fromView(view)`，
+  /// 读的是原始 FlutterView（整窗），所以在 `main` 里配置一次、把面板数据
+  /// 交给它即可，业务页面零改动：
+  /// ```dart
+  /// EasySplit.config.onPaneMediaQuery = (data) => ScreenUtil.configure(
+  ///       data: data,
+  ///       designSize: const Size(375, 812),
+  ///       splitScreenMode: false, // ScreenUtil 的 late 字段，首次必须显式传
+  ///       minTextAdapt: false,
+  ///     );
+  /// // 设计稿尺寸变了：改上面这个值 + EasySplit.updateLayout() 重新下发
+  /// ```
+  ///
+  /// 注意：
+  /// - 回调在面板 build 期间同步触发，**不要在回调里 setState**；
+  /// - ScreenUtil 是全局单例，左右两栏同时可见时后构建的那个生效
+  ///   （与在分栏里直接 `ScreenUtil.configure` 的行为一致）；
+  /// - 回调只在面板重建/尺寸变化时触发，改完配置可调用
+  ///   [EasySplit.updateLayout] 让已显示的面板重新上报。
+  void Function(MediaQueryData data)? onPaneMediaQuery;
 
   /// 重复路由去重（默认开启）
   ///
@@ -191,8 +218,15 @@ class EasySplit {
   /// 重复路由匹配规则（默认 name + arguments 相同）
   static bool Function(RouteSettings a, RouteSettings b)? get sameRoute =>
       config.sameRoute;
-  static set sameRoute(bool Function(RouteSettings a, RouteSettings b)? value) =>
+  static set sameRoute(
+          bool Function(RouteSettings a, RouteSettings b)? value) =>
       config.sameRoute = value;
+
+  /// 面板 MediaQuery 变更回调（见 [EasySplitConfig.onPaneMediaQuery]）
+  static void Function(MediaQueryData data)? get onPaneMediaQuery =>
+      config.onPaneMediaQuery;
+  static set onPaneMediaQuery(void Function(MediaQueryData data)? value) =>
+      config.onPaneMediaQuery = value;
 
   /// 标准 Navigator 方案（`onGenerateRoute`）的一行去重接入：
   /// ```dart
@@ -206,6 +240,13 @@ class EasySplit {
 
   // ---- 核心逻辑 ----
 
+  /// 整窗 MediaQuery：面板内注入的"面板尺寸"不影响它
+  ///
+  /// 断点判定、左右矩形、铰链避让都按整窗几何算，与页面里
+  /// `MediaQuery.sizeOf(context)` 拿到的面板尺寸互不干扰。
+  static MediaQueryData _windowMediaQueryOf(BuildContext context) =>
+      EasySplitWindowMetrics.of(context);
+
   /// 是否为宽屏分栏模式：
   /// 优先使用 [config.isWideOverride]（用户自定义决议），
   /// 未设置时使用内部默认逻辑：宽度 >= 断点 且横屏。
@@ -213,15 +254,15 @@ class EasySplit {
   static bool isWide(BuildContext context) {
     final override = config.isWideOverride;
     if (override != null) return override(context);
-    final size = MediaQuery.sizeOf(context);
-    return size.width >= config.breakpoint &&
-        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final mq = _windowMediaQueryOf(context);
+    return mq.size.width >= config.breakpoint &&
+        mq.orientation == Orientation.landscape;
   }
 
   /// 面板安全区内边距（按屏幕方向决定）：
   /// 竖屏：上下避让（刘海/Home 指示条）；横屏：左右避让
   static EdgeInsets safePaneInsets(BuildContext context) {
-    final mq = MediaQuery.of(context);
+    final mq = _windowMediaQueryOf(context);
     final portrait = mq.orientation == Orientation.portrait;
     return portrait
         ? EdgeInsets.only(top: mq.padding.top, bottom: mq.padding.bottom)
@@ -232,7 +273,7 @@ class EasySplit {
   /// 横屏：仅右侧（面板左侧在屏内，不再避让左侧刘海）；
   /// 竖屏：上下（刘海/Home 指示条）
   static EdgeInsets paneContentInsets(BuildContext context) {
-    final mq = MediaQuery.of(context);
+    final mq = _windowMediaQueryOf(context);
     final portrait = mq.orientation == Orientation.portrait;
     return portrait
         ? EdgeInsets.only(top: mq.padding.top, bottom: mq.padding.bottom)
@@ -249,9 +290,55 @@ class EasySplit {
     );
   }
 
+  /// 面板内容的 MediaQuery：让页面把**自己占用的区域**当成屏幕
+  ///
+  /// 默认布局与分栏路由内部都用它给页面注入 MediaQuery，因此页面里
+  /// `MediaQuery.sizeOf(context)` / `MediaQuery.of(context).size.width`
+  /// 拿到的是面板宽度（左栏 / 右栏区域），而不是整窗宽度 —— 按宽度
+  /// 百分比、栅格、等比缩放写的布局不会再被"放大"。
+  ///
+  /// [parent] 通常是 `MediaQuery.of(context)`（整窗数据）；
+  /// [paneRect] 是面板矩形；[insets] 是面板内容已避让的安全区
+  /// （见 [paneContentInsets]）。返回的 data：
+  /// - `size` = 面板矩形尺寸 - insets
+  /// - `padding` / `viewPadding` 扣掉 insets（避免内层再次避让）
+  /// - 其余（devicePixelRatio / textScaler / viewInsets / displayFeatures…）
+  ///   沿用 [parent]
+  ///
+  /// 自定义 [EasySplitConfig.layoutBuilder] 时，可用它给自己的区域换算：
+  /// ```dart
+  /// EasySplit.config.layoutBuilder = (context, left, right) {
+  ///   final mq = MediaQuery.of(context);
+  ///   return Row(children: [
+  ///     Expanded(
+  ///       flex: 3,
+  ///       child: MediaQuery(
+  ///         data: EasySplit.paneMediaQuery(mq, Offset.zero & mq.size),
+  ///         child: left,
+  ///       ),
+  ///     ),
+  ///     ...
+  ///   ]);
+  /// };
+  /// ```
+  static MediaQueryData paneMediaQuery(
+    MediaQueryData parent,
+    Rect paneRect, {
+    EdgeInsets insets = EdgeInsets.zero,
+  }) {
+    return parent.copyWith(
+      size: Size(
+        (paneRect.width - insets.horizontal).clamp(0.0, double.infinity),
+        (paneRect.height - insets.vertical).clamp(0.0, double.infinity),
+      ),
+      padding: removeInsets(parent.padding, insets),
+      viewPadding: removeInsets(parent.viewPadding, insets),
+    );
+  }
+
   /// 右栏宽度：屏幕宽 * paneRatio，并避让折叠屏铰链
   static double paneWidth(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
+    final size = _windowMediaQueryOf(context).size;
     var width = size.width * config.paneRatio;
     for (final feature in MediaQuery.displayFeaturesOf(context)) {
       if (feature.type == DisplayFeatureType.hinge &&
@@ -268,7 +355,7 @@ class EasySplit {
 
   /// 默认布局：左右并排（右栏占 paneRatio，铰链避让）
   static EasySplitLayout defaultLayout(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
+    final size = _windowMediaQueryOf(context).size;
     final pw = paneWidth(context);
     return EasySplitLayout(
       leftRect: Rect.fromLTWH(0, 0, size.width - pw, size.height),

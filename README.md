@@ -143,6 +143,64 @@ EasySplitScope(
 With `MaterialApp.router` you can also pass through inner `Navigator` parameters:
 `easySplitNativeRouterConfig(home: ..., pageBuilders: ..., observers: [...], onUnknownRoute: ...)`.
 
+### 5. Inside a pane, "the screen" is the pane
+
+EasySplit injects a **pane-scoped `MediaQuery`**, so inside the left pane and the right pane:
+
+- `MediaQuery.sizeOf(context)` / `MediaQuery.of(context).size` is the pane size;
+- `MediaQuery.orientationOf(context)` follows the pane;
+- `padding` / `viewPadding` are already reduced by the safety insets the pane applied.
+
+Percentage widths, grids, spacing factors and aspect ratios therefore adapt to the pane width -
+**no page code changes**.
+
+What intentionally stays window-based (otherwise the split itself would break):
+
+- `EasySplit.isWide`, `EasySplit.layoutOf`, `EasySplit.paneWidth`, `EasySplit.paneContentInsets`
+  keep computing from the whole window, so the breakpoint is never decided by the pane size;
+- dialogs / bottom sheets opened from a pane still use the window size (they live in the overlay).
+
+#### ScreenUtil
+
+ScreenUtil does not read `MediaQuery`: `ScreenUtil.init(context)` and `ScreenUtilInit` go through
+`View.maybeOf(context)` + `MediaQueryData.fromView(view)`, i.e. always the whole window. Forward the
+pane data once in `main()` - pages stay untouched:
+
+```dart
+void main() {
+  EasySplit.config.onPaneMediaQuery = (data) => ScreenUtil.configure(
+        data: data,
+        designSize: const Size(375, 812), // your design size
+        splitScreenMode: false, // ScreenUtil late fields: pass them explicitly
+        minTextAdapt: false,    // on the first configure call
+      );
+  runApp(const App());
+}
+```
+
+Notes:
+
+- `splitScreenMode` / `minTextAdapt` are late fields inside ScreenUtil: the **first** `configure`
+  call must pass them explicitly, otherwise a pane building before `ScreenUtilInit` throws
+  `LateInitializationError`;
+- the callback fires synchronously while a pane builds - do not call `setState` inside it;
+- ScreenUtil is a global singleton: with both panes visible the pane built last wins;
+- after you change your own scaling settings, call `EasySplit.updateLayout()` so visible panes
+  report again.
+
+#### Custom layouts
+
+With `EasySplit.config.layoutBuilder` the pane size is derived from the real constraints, so pages
+still see their own size. To build the same data yourself, use `EasySplit.paneMediaQuery`:
+
+```dart
+final data = EasySplit.paneMediaQuery(
+  MediaQuery.of(context),              // window data
+  Rect.fromLTWH(0, 0, 600, 800),       // your pane rect
+  insets: const EdgeInsets.only(top: 24),
+);
+```
+
 ## Project layout
 
 ```
@@ -151,11 +209,16 @@ lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
 lib/src/easy_split_scope.dart            EasySplitScope split container
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate (MaterialApp.router)
 lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver (one-line dedupe for onGenerateRoute)
-test/                                    35 behavior tests (gestures, routing, dedupe, params, live layout)
+lib/src/easy_split_window.dart           Window metrics + pane-scoped MediaQuery (internal)
+test/                                    47 behavior tests (gestures, routing, dedupe, params, live layout, pane size)
+packages/easy_split_go_router/            go_router adapter (separate package)
+packages/easy_split_demo/                Demo pages shared by both example entries
+  `-- lib/src/pages.dart                 Demo screens (ad, home, detail, dialogs)
+  `-- lib/src/demos.dart                 TabBar home + pane-width demo
+  `-- lib/src/setup.dart                 Shared route table, ScreenUtil wiring, theme
 example/
   `-- lib/main.dart                       Option 1: MaterialApp onGenerateRoute
   `-- lib/main_1.dart                     Option 2: MaterialApp.router RouterDelegate
-  `-- lib/pages.dart                      Shared demo pages
 ```
 
 ## How gesture pass-through works
@@ -221,7 +284,34 @@ immediately). Rotate the simulator (Cmd + arrow keys) to check folded/unfolded s
 The demo also includes a simulated login gate: while logged out, every entry on the home page first
 opens a mock login page (`/login`, full screen, never split); after logging in it continues to the
 target page. The top-right corner lets you log out. The code lives in
-`example/lib/pages.dart` (`DemoAuth`, `ensureLoggedIn`, `openProtected`).
+`packages/easy_split_demo/lib/src/pages.dart` (`DemoAuth`, `ensureLoggedIn`, `openProtected`).
+
+The example also ships a bottom-tabbar home page (`packages/easy_split_demo/lib/src/demos.dart`,
+`TabsHomePage`; reachable
+from the ad page and from the home list) that doubles as the walkthrough for pane-aware layouts:
+
+- four bottom tabs: counter / scroll / input / width;
+- folding or unfolding keeps the current tab, the counter, the scroll offset and the typed text;
+- the **width** tab shows pane size vs window size, 100 / 50 / 25% blocks, a responsive grid and
+  ScreenUtil (`.w` / `.sp`) values - all computed from the pane width.
+
+No foldable is needed: the unfold icon in the app bar forces "folded / unfolded" through
+`EasySplit.config.isWideOverride`, which runs exactly the same code path as a real fold on a phone.
+
+To land directly on it (handy for screenshots or CI), pass the example-only switches - both entry
+files support them:
+
+```bash
+cd example
+# TabBar home, unfolded (two panes)
+flutter run -t lib/main.dart \
+  --dart-define=EASYSPLIT_FORCE_MODE=wide \
+  --dart-define=EASYSPLIT_START_ROUTE=/tabs-home \
+  --dart-define=EASYSPLIT_START_TAB=3
+
+# TabBar home, folded
+flutter run -t lib/main_1.dart --dart-define=EASYSPLIT_START_ROUTE=/tabs-home
+```
 
 ## Design notes
 
