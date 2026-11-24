@@ -7,7 +7,8 @@ import 'package:easy_split/easy_split.dart';
 import 'package:flutter/material.dart';
 
 /// Demo 页面：广告页 → 首页（可开始分屏）→ 一级页 → 二级页 → 系统弹窗大全
-/// （导航直接调 Navigator.pushNamed，入口见 main.dart）
+/// （导航直接调 Navigator.pushNamed，入口见 example/lib/main.dart 与
+/// example/lib/main_1.dart）
 
 // ---------------------------------------------------------------------------
 // 演示数据
@@ -74,7 +75,9 @@ const kDemoItems = [
 class DemoAuth {
   DemoAuth._();
 
-  static final ValueNotifier<String?> currentUser = ValueNotifier<String?>(null);
+  static final ValueNotifier<String?> currentUser = ValueNotifier<String?>(
+    null,
+  );
 
   static bool get isLoggedIn => currentUser.value != null;
 
@@ -333,6 +336,27 @@ class _AdPageState extends State<AdPage> {
                         style: TextStyle(fontSize: 16),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    // 演示入口：首页换成底部 tabbar 形式，
+                    // 展开 / 折叠时 tab、计数、滚动位置、输入内容都保留，
+                    // 第 4 个 tab 演示窗格宽度 / ScreenUtil
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          Navigator.pushReplacementNamed(context, '/tabs-home'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white70),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      icon: const Icon(Icons.tab_outlined),
+                      label: const Text(
+                        'TabBar 首页示例',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -427,11 +451,26 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 8,
+              // —— 演示入口：一个 TabBar 首页，同时覆盖"折叠后状态保留"
+              //    和"窗格宽度适配 + ScreenUtil"（第 4 个 tab）——
+              Card(
+                elevation: 0,
+                color: theme.colorScheme.tertiaryContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.tab_unselected_outlined),
+                  title: const Text('TabBar 首页示例'),
+                  subtitle: const Text(
+                    '切 tab / 计数 / 滚动 / 输入，再折叠⇄展开；'
+                    '第 4 个 tab 演示窗格宽度与 ScreenUtil',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () =>
+                      Navigator.pushReplacementNamed(context, '/tabs-home'),
                 ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Text(
                   locked ? '内容列表（未登录，点击先去登录）' : '内容列表（点击 → 一级页详情）',
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -484,9 +523,7 @@ class _LoginButton extends StatelessWidget {
               if (ok && context.mounted) {
                 ScaffoldMessenger.of(context)
                   ..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    const SnackBar(content: Text('登录成功，入口已解锁')),
-                  );
+                  ..showSnackBar(const SnackBar(content: Text('登录成功，入口已解锁')));
               }
             },
             icon: const Icon(Icons.login),
@@ -680,9 +717,8 @@ class DemoSplitLayout {
                   Text(
                     '${mode.label}：内容栏 ${(ratio * 100).round()}% · '
                     '列表 ${((1 - ratio) * 100).round()}%',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).hintColor,
-                        ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: Theme.of(context).hintColor),
                   ),
                 ],
               ),
@@ -706,6 +742,7 @@ class DemoSplitLayout {
     );
   }
 }
+
 /// 「开始分屏 / 停止分屏 + 分栏布局设置」：布局改动调用 EasySplit.updateLayout 即时生效
 class _SplitControlCard extends StatelessWidget {
   const _SplitControlCard({required this.title});
@@ -845,11 +882,7 @@ class DetailPage extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(
-                Icons.person_outline,
-                size: 16,
-                color: theme.hintColor,
-              ),
+              Icon(Icons.person_outline, size: 16, color: theme.hintColor),
               const SizedBox(width: 4),
               Text(
                 '当前登录：${DemoAuth.currentUser.value ?? '未登录'}',

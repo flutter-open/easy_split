@@ -1,5 +1,5 @@
 import 'package:easy_split/easy_split.dart';
-import 'package:easy_split_example/pages.dart';
+import 'package:easy_split_demo/easy_split_demo.dart';
 // Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
 // which requires Flutter 3.47; this package supports Flutter 3.27+.
 // ignore: deprecated_member_use
