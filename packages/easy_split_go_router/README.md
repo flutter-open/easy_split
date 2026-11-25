@@ -16,8 +16,8 @@ with **built-in duplicate-route deduplication**. No page code changes: `context.
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.2
-  easy_split_go_router: ^0.1.3
+  easy_split: ^0.2.1
+  easy_split_go_router: ^0.2.0
   go_router: ">=15.0.0 <19.0.0"
 ```
 
@@ -55,6 +55,40 @@ list so it behaves as a native full-screen page and creates the panes itself:
 ```dart
 EasySplit.config.fullscreenRoutes.add('/home');
 ```
+
+## Using `pageBuilder`
+
+`EasySplitGoRoute` accepts either `builder` or `pageBuilder`, exactly one of the two, just like
+`GoRoute`. Use `pageBuilder` when you already build a `Page` (or need the final `GoRouterState` while
+constructing one):
+
+```dart
+EasySplitGoRoute(
+  path: '/login',
+  pageBuilder: (context, state) => MaterialPage<void>(
+    arguments: state.extra ??
+        <String, dynamic>{
+          ...state.pathParameters,
+          ...state.uri.queryParameters,
+        },
+    child: const LoginPage(),
+  ),
+)
+```
+
+The returned page is adapted to the split-aware `EasySplitPage`:
+
+- `MaterialPage` / `CupertinoPage`: `child`, `key`, `name`, `arguments`, `restorationId`,
+  `maintainState`, `fullscreenDialog` and `allowSnapshotting` are kept. When `name` / `arguments` are
+  omitted they fall back to `state.uri` / `state.extra`.
+- `CustomTransitionPage` (including `NoTransitionPage`): additionally keeps `transitionsBuilder`,
+  `transitionDuration` and `reverseTransitionDuration`, so custom transitions play inside the right pane.
+- `EasySplitPage`: returned untouched, so its own `fullscreen` and other pane options win.
+- Any other `Page` subclass: throws `ArgumentError`, because its `child` cannot be extracted. Use one of
+  the types above, return an `EasySplitPage`, or switch back to `builder`.
+
+The route-level `fullscreen: true` still applies to adapted pages, and `EasySplit.config.fullscreenRoutes`
+is matched against the route path even when the returned page sets its own `name`.
 
 ## Duplicate-route deduplication
 
@@ -137,7 +171,7 @@ A complete runnable example lives in `example/lib/main_on_enter.dart`
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `builder` | required | `GoRouterWidgetBuilder`, same usage as `GoRoute.builder` |
+| `builder` / `pageBuilder` | one required | same as `GoRoute`; provide exactly one of the two |
 | `name` / `path` / `routes` / `parentNavigatorKey` | - | forwarded to `GoRoute` |
 | `fullscreen` | `false` | keep this page full screen (never split), e.g. login or settings |
 | `dedupe` | `true` | whether this route participates in deduplication |
@@ -145,8 +179,9 @@ A complete runnable example lives in `example/lib/main_on_enter.dart`
 
 The appearance parameters of a pane route (`maintainState`, `fullscreenDialog`, `allowSnapshotting`,
 `requestFocus`) come from the internal `EasySplitPage` and default to the same behavior as
-`MaterialPageRoute`. To customize them, use `EasySplitPage(child: ..., name: ..., maintainState: ...)`
-directly as the `pageBuilder` of a `GoRoute`.
+`MaterialPageRoute`. Pages returned from `pageBuilder` keep the corresponding values they were built
+with. To customize them further (including `transitionsBuilder` / transition durations), use
+`EasySplitPage(child: ..., name: ..., maintainState: ...)` directly as the `pageBuilder` of a `GoRoute`.
 
 ## Login guard (example)
 

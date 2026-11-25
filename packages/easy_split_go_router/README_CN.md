@@ -14,8 +14,8 @@
 
 ```yaml
 dependencies:
-  easy_split: ^0.1.2
-  easy_split_go_router: ^0.1.3
+  easy_split: ^0.2.1
+  easy_split_go_router: ^0.2.0
   go_router: ">=15.0.0 <19.0.0"
 ```
 
@@ -52,6 +52,39 @@ MaterialApp.router(routerConfig: router);
 ```dart
 EasySplit.config.fullscreenRoutes.add('/home');
 ```
+
+## 使用 `pageBuilder`
+
+`EasySplitGoRoute` 与 `GoRoute` 一样，`builder` 和 `pageBuilder` 二选一（必须且只能传一个）。
+当你已经用 `Page` 构建页面，或需要拿到最终的 `GoRouterState` 再构造 `Page` 时，用 `pageBuilder`：
+
+```dart
+EasySplitGoRoute(
+  path: '/login',
+  pageBuilder: (context, state) => MaterialPage<void>(
+    arguments: state.extra ??
+        <String, dynamic>{
+          ...state.pathParameters,
+          ...state.uri.queryParameters,
+        },
+    child: const LoginPage(),
+  ),
+)
+```
+
+返回的 Page 会被适配成分栏用的 `EasySplitPage`：
+
+- `MaterialPage` / `CupertinoPage`：保留 `child`、`key`、`name`、`arguments`、`restorationId`、
+  `maintainState`、`fullscreenDialog`、`allowSnapshotting`；未设置 `name` / `arguments` 时分别回退到
+  `state.uri` / `state.extra`。
+- `CustomTransitionPage`（含 `NoTransitionPage`）：额外保留 `transitionsBuilder`、
+  `transitionDuration`、`reverseTransitionDuration`，自定义转场只在右侧窗格内播放。
+- `EasySplitPage`：原样返回，分栏参数以它自己的设置为准（包括 `fullscreen`）。
+- 其他 `Page` 子类：抛出 `ArgumentError`（拿不到 child，无法安全转换）。请改用上述类型、直接返回
+  `EasySplitPage`，或改用 `builder`。
+
+路由级的 `fullscreen: true` 对适配后的页面依然生效；`EasySplit.config.fullscreenRoutes` 按路由路径匹配，
+即使返回的 Page 自定义了 `name` 也不会失效。
 
 ## 重复路由去重
 
@@ -128,14 +161,15 @@ GoRouter(
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `builder` | 必填 | `GoRouterWidgetBuilder`，用法与 `GoRoute.builder` 相同 |
+| `builder` / `pageBuilder` | 二选一必填 | 用法与 `GoRoute` 相同；两者必须且只能传一个 |
 | `name` / `path` / `routes` / `parentNavigatorKey` | - | 透传给 `GoRoute` |
 | `fullscreen` | `false` | 该页面保持全屏（永不分屏），例如登录页或设置页 |
 | `dedupe` | `true` | 该路由是否参与去重 |
 | `redirect` / `onExit` / `caseSensitive` | - | 含义与 `GoRoute` 上相同，原样透传；分屏页面支持路由级守卫和离开确认 |
 
 窗格路由的外观参数（`maintainState`、`fullscreenDialog`、`allowSnapshotting`、`requestFocus`）
-来自内部的 `EasySplitPage`，默认行为与 `MaterialPageRoute` 一致。需要自定义时，直接把
+来自内部的 `EasySplitPage`，默认行为与 `MaterialPageRoute` 一致；`pageBuilder` 返回的页面会保留
+其对应的设置。需要进一步自定义（包括 `transitionsBuilder` / 转场时长）时，直接把
 `EasySplitPage(child: ..., name: ..., maintainState: ...)` 用作 `GoRoute` 的 `pageBuilder`。
 
 ## 登录拦截（示例）

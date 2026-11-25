@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:easy_split/easy_split.dart';
-// Flutter 3.47+ deprecates flutter/material.dart in favour of package:material_ui,
-// which requires Flutter 3.47; this package supports Flutter 3.27+.
+// Flutter 3.47+ deprecates flutter/cupertino.dart and flutter/material.dart in
+// favour of package:material_ui, which requires Flutter 3.47; this package
+// supports Flutter 3.27+.
+// ignore: deprecated_member_use
+import 'package:flutter/cupertino.dart' show CupertinoPage;
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -17,7 +20,9 @@ export 'package:easy_split/easy_split.dart'
 
 /// EasySplitGoRoute · GoRoute 的分栏适配子类
 ///
-/// 与 GoRoute 完全同参，只把生成的 Page 换成分栏路由：
+/// 与 GoRoute 同参：既可以用 `builder` 返回页面 Widget，也可以用
+/// `pageBuilder` 返回一个 [Page]（两者必须且只能传一个）。
+/// 无论走哪条路径，最终都会换成分栏路由：
 /// - 宽屏（横屏）：页面渲染到右侧分栏区域
 /// - 折叠（窄屏）：正常全屏路由模式
 /// - [fullscreen] = true：任何宽度都全屏（沉浸页）
@@ -29,9 +34,20 @@ export 'package:easy_split/easy_split.dart'
 /// GoRouter(routes: [
 ///   GoRoute(path: '/', builder: (_, _) => EasySplitScope(child: RootPage())),
 ///   EasySplitGoRoute(path: '/detail', builder: (_, _) => DetailPage()),
-///   ShellRoute(builder: ..., routes: [...]),
+///   EasySplitGoRoute(
+///     path: '/login',
+///     pageBuilder: (context, state) => MaterialPage<void>(
+///       arguments: state.extra,
+///       child: const LoginPage(),
+///     ),
+///   ),
 /// ])
 /// ```
+///
+/// `pageBuilder` 返回的 [MaterialPage] / [CupertinoPage] / [CustomTransitionPage]
+/// （含 [NoTransitionPage]）会被适配成分栏用的 [EasySplitPage]，
+/// child、key、arguments、转场等参数原样保留；直接返回 [EasySplitPage]
+/// 则不做任何包装，分栏参数由它自己决定。
 ///
 /// 重复路由去重（[dedupe]，默认 true）：
 /// 和 MaterialApp.router 方案一致——当 `context.push('/detail')` 的目标页面
@@ -50,7 +66,8 @@ export 'package:easy_split/easy_split.dart'
 class EasySplitGoRoute extends GoRoute {
   EasySplitGoRoute({
     required String path,
-    required GoRouterWidgetBuilder builder,
+    GoRouterWidgetBuilder? builder,
+    GoRouterPageBuilder? pageBuilder,
     String? name,
     GlobalKey<NavigatorState>? parentNavigatorKey,
     List<GoRoute> routes = const [],
@@ -59,7 +76,11 @@ class EasySplitGoRoute extends GoRoute {
     bool caseSensitive = true,
     this.fullscreen = false,
     this.dedupe = true,
-  }) : super(
+  })  : assert(
+          (builder == null) != (pageBuilder == null),
+          'EasySplitGoRoute 需要且只能传 builder 或 pageBuilder 其中一个',
+        ),
+        super(
           path: path,
           name: name,
           parentNavigatorKey: parentNavigatorKey,
@@ -69,11 +90,18 @@ class EasySplitGoRoute extends GoRoute {
           caseSensitive: caseSensitive,
           pageBuilder: (context, state) {
             if (dedupe) _scheduleDedupe(context);
+            if (pageBuilder != null) {
+              return _adaptPage(
+                pageBuilder(context, state),
+                state: state,
+                fullscreen: fullscreen,
+              );
+            }
             return EasySplitPage(
               name: state.uri.toString(),
               arguments: state.extra,
               fullscreen: fullscreen,
-              child: (_) => builder(context, state),
+              child: (_) => builder!(context, state),
             );
           },
         );
@@ -83,6 +111,77 @@ class EasySplitGoRoute extends GoRoute {
 
   /// 是否启用「同一页面已在栈内则置顶」去重（默认 true）
   final bool dedupe;
+}
+
+/// 把 `pageBuilder` 返回的 [Page] 适配成分栏用的 [EasySplitPage]。
+///
+/// - [EasySplitPage]：原样返回，分栏参数由调用方自己决定；
+/// - [MaterialPage] / [CupertinoPage]：保留 child、key、name、arguments、
+///   restorationId、maintainState、fullscreenDialog、allowSnapshotting；
+/// - [CustomTransitionPage]（含 [NoTransitionPage]）：额外保留自定义转场；
+/// - 其他 Page 子类拿不到 child，无法安全转换，抛 [ArgumentError]。
+Page<dynamic> _adaptPage(
+  Page<dynamic> page, {
+  required GoRouterState state,
+  required bool fullscreen,
+}) {
+  if (page is EasySplitPage) {
+    return page;
+  }
+  // page.name 可能是自定义的，按路径再判定一次 fullscreenRoutes，
+  // 保持与 builder 路径（name 固定为 state.uri）一致的配置语义。
+  final bool fullscreenByPath = EasySplit.isFullscreen(
+    RouteSettings(name: state.uri.toString()),
+  );
+  final bool anyFullscreen = fullscreen || fullscreenByPath;
+  if (page is CustomTransitionPage) {
+    return EasySplitPage(
+      key: page.key,
+      name: page.name ?? state.uri.toString(),
+      arguments: page.arguments ?? state.extra,
+      restorationId: page.restorationId,
+      maintainState: page.maintainState,
+      fullscreenDialog: page.fullscreenDialog,
+      fullscreen: anyFullscreen,
+      transitionsBuilder: page.transitionsBuilder,
+      transitionDuration: page.transitionDuration,
+      reverseTransitionDuration: page.reverseTransitionDuration,
+      child: (_) => page.child,
+    );
+  }
+  if (page is MaterialPage) {
+    return EasySplitPage(
+      key: page.key,
+      name: page.name ?? state.uri.toString(),
+      arguments: page.arguments ?? state.extra,
+      restorationId: page.restorationId,
+      maintainState: page.maintainState,
+      fullscreenDialog: page.fullscreenDialog,
+      allowSnapshotting: page.allowSnapshotting,
+      fullscreen: anyFullscreen,
+      child: (_) => page.child,
+    );
+  }
+  if (page is CupertinoPage) {
+    return EasySplitPage(
+      key: page.key,
+      name: page.name ?? state.uri.toString(),
+      arguments: page.arguments ?? state.extra,
+      restorationId: page.restorationId,
+      maintainState: page.maintainState,
+      fullscreenDialog: page.fullscreenDialog,
+      allowSnapshotting: page.allowSnapshotting,
+      fullscreen: anyFullscreen,
+      child: (_) => page.child,
+    );
+  }
+  throw ArgumentError.value(
+    page,
+    'pageBuilder',
+    'EasySplitGoRoute 暂不支持该 Page 类型；'
+        '请改用 MaterialPage / CupertinoPage / CustomTransitionPage，'
+        '或直接返回 EasySplitPage，或改用 builder 参数。',
+  );
 }
 
 /// 每个 GoRouter 最近一次已处理的 RouteMatchList 身份，

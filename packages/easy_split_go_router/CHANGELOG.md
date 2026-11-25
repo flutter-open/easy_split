@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0
+
+- **`pageBuilder` support.** `EasySplitGoRoute` now accepts either `builder` or `pageBuilder`
+  (exactly one, same as `GoRoute`). Pages returned from `pageBuilder` are adapted to the
+  split-aware `EasySplitPage`:
+  - `MaterialPage` / `CupertinoPage`: `child`, `key`, `name`, `arguments`, `restorationId`,
+    `maintainState`, `fullscreenDialog` and `allowSnapshotting` are preserved;
+  - `CustomTransitionPage` / `NoTransitionPage`: custom transitions and their durations are
+    preserved and play inside the right pane;
+  - `EasySplitPage`: returned untouched;
+  - other `Page` subclasses throw `ArgumentError` (their child cannot be extracted).
+- Requires `easy_split ^0.2.1`, which adds `transitionsBuilder`, `transitionDuration`,
+  `reverseTransitionDuration` and `key` to `EasySplitPage`.
+- Deduplication works the same for `pageBuilder` routes.
+
 ## 0.1.4
 
 - `easy_split` constraint raised to `^0.2.0` (pane-scoped `MediaQuery`, `onPaneMediaQuery`,
