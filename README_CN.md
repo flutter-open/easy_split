@@ -64,6 +64,11 @@ MaterialApp.router(routerConfig: routerConfig)
 其他路由体系（`Navigator.pages` 等）可以使用 `EasySplitPage(child: ..., name: ...)` 作为
 `Page`，它由同一个 `EasySplitRoute` 支撑。
 
+GetX 项目可以使用 [easy_split_getx](packages/easy_split_getx/) 适配包替代
+`EasySplit.routeAdapter`：它保留 GetX 的 bindings、middleware、转场和路由上报。接入方式见
+[经典命名路由](packages/easy_split_getx/README_CN.md#经典命名路由) 和
+[Navigator 2.0](packages/easy_split_getx/README_CN.md#navigator-20getmaterialapprouter)。
+
 ### 2.1 重复路由去重（默认开启）
 
 反复点击同一个列表项不会再压入重复路由，而是把已有路由提到栈顶。
@@ -72,6 +77,7 @@ MaterialApp.router(routerConfig: routerConfig)
 | --- | --- |
 | 方式一，onGenerateRoute | 添加 `navigatorObservers: [EasySplit.dedupeObserver]` |
 | 方式二，MaterialApp.router | **自动生效**（delegate 拦截 `pushNamed`） |
+| easy_split_getx，经典模式 | 添加 `navigatorObservers: [EasySplit.dedupeObserver]` |
 
 默认「同一个页面」指 `name + arguments` 相同，也可以自定义：
 
@@ -203,6 +209,7 @@ lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRou
 lib/src/easy_split_window.dart           整窗几何 + 窗格 MediaQuery（内部实现）
 test/                                    47 个行为测试（手势、路由、去重、参数、实时布局、窗格尺寸）
 packages/easy_split_go_router/            go_router 适配包
+packages/easy_split_getx/                 GetX 适配包（经典模式 + Navigator 2.0）
 packages/easy_split_demo/                两个 example 入口共用的演示包
   `-- lib/src/pages.dart                 演示页面（广告、首页、详情、弹窗大全）
   `-- lib/src/demos.dart                 TabBar 首页 + 窗格宽度演示
@@ -233,7 +240,7 @@ example/
    把整个路由收缩到窗格内，热区就移动到右窗格的左边缘，转场在窗格内播放，Cupertino 的拖动
    进度也相对窗格宽度计算（手势与动画 1:1）。`buildContent` 里的命中测试裁剪够不到这一层，
    所以位置必须在这里修正。
-3. **命中测试兜底**：`_PaneHitTestScope`（`RenderProxyBox.hitTest`）用 `localToGlobal` 转换
+3. **命中测试兜底**：`EasySplitPaneHitTest`（`RenderProxyBox.hitTest`）用 `localToGlobal` 转换
    局部坐标并与 `paneRect` 比较；在右窗格外返回 `false`，指针便落到下层。即使页面画到了自己
    边界之外（例如使用 `OverflowBox`），也无法挡住左窗格。
 

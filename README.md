@@ -66,6 +66,11 @@ MaterialApp.router(routerConfig: routerConfig)
 Other routing systems (`Navigator.pages`, etc.) can use `EasySplitPage(child: ..., name: ...)` as a
 `Page`; it is backed by the same `EasySplitRoute`.
 
+GetX users can use the [easy_split_getx](packages/easy_split_getx/) adapter instead of
+`EasySplit.routeAdapter`: it keeps GetX bindings, middleware, transitions and route reporting. See the
+[classic named-route](packages/easy_split_getx/README.md#classic-named-routes) and
+[Navigator 2.0](packages/easy_split_getx/README.md#navigator-20-getmaterialapprouter) setups.
+
 ### 2.1 Duplicate-route deduplication (on by default)
 
 Tapping the same list item repeatedly no longer pushes duplicate routes; the existing entry is
@@ -75,6 +80,7 @@ brought to the top instead.
 | --- | --- |
 | Option 1, onGenerateRoute | Add `navigatorObservers: [EasySplit.dedupeObserver]` |
 | Option 2, MaterialApp.router | **Automatic** (the delegate intercepts `pushNamed`) |
+| easy_split_getx, classic mode | Add `navigatorObservers: [EasySplit.dedupeObserver]` |
 
 "Same page" means the same `name + arguments` by default, and can be customized:
 
@@ -212,6 +218,7 @@ lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver (one-line dedup
 lib/src/easy_split_window.dart           Window metrics + pane-scoped MediaQuery (internal)
 test/                                    47 behavior tests (gestures, routing, dedupe, params, live layout, pane size)
 packages/easy_split_go_router/            go_router adapter (separate package)
+packages/easy_split_getx/                 GetX adapter (separate package, classic + Navigator 2.0)
 packages/easy_split_demo/                Demo pages shared by both example entries
   `-- lib/src/pages.dart                 Demo screens (ad, home, detail, dialogs)
   `-- lib/src/demos.dart                 TabBar home + pane-width demo
@@ -247,7 +254,7 @@ layers:
    transition inside the pane, and makes Cupertino's drag progress relative to the pane width
    (gesture and animation 1:1). Clipping hit tests in `buildContent` cannot reach this layer, so the
    position has to be fixed here.
-3. **Hit-test fallback**: `_PaneHitTestScope` (`RenderProxyBox.hitTest`) converts the local position
+3. **Hit-test fallback**: `EasySplitPaneHitTest` (`RenderProxyBox.hitTest`) converts the local position
    with `localToGlobal` and compares it with `paneRect`; outside the right pane it returns `false`, so
    the pointer falls through to the layer below. Even if a page paints outside its bounds (e.g. with
    an `OverflowBox`), it cannot block the left pane.
