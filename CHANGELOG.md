@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+### Added
+
+- Exposed the pane route building blocks as public widgets so router adapters can reuse them:
+  `EasySplitPaneHitTest` (left-pane click-through), `EasySplitPaneFrame` (pane positioning /
+  transitions) and `EasySplitPaneTeleport` (pane decoration, insets and pane-scoped `MediaQuery`).
+  `EasySplitRoute` and `EasySplitPage` behaviour is unchanged; the widgets were previously private
+  (`_PaneHitTestScope`, `_PaneFrame`, `_PaneTeleport`).
+- `EasySplitPage` and `EasySplitRoute` accept `key`, `transitionsBuilder`, `transitionDuration` and
+  `reverseTransitionDuration`, so router adapters (such as `easy_split_go_router`'s `pageBuilder`
+  support) can carry over custom page transitions into the pane.
+
 ## 0.2.0
 
 ### Fixed

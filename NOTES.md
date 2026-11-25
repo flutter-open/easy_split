@@ -71,7 +71,7 @@ Navigator.onGenerateRoute was null, but the route named "/home" was referenced.
 - 从右栏左缘右滑 → 没反应
 
 最终在 `buildTransitions` 里把整棵转场子树套进 `Padding + SizedBox(paneRect)`，热区与动画随之下移到右栏；
-`_PaneHitTestScope` 的 `localToGlobal` 比对只作为越界绘制的兜底。
+`EasySplitPaneHitTest` 的 `localToGlobal` 比对只作为越界绘制的兜底。
 
 ## 7. `Page` 不能不带 key
 
@@ -171,7 +171,7 @@ router.push(from);       // 回原目标页
 ## 15. 改了 `paneRatio` / `layoutDelegate` 分栏没变化
 
 `EasySplit.config` 里的几何配置（`paneRatio`、`breakpoint`、`layoutDelegate`、`layoutBuilder`）
-不是响应式的：`EasySplitScope` 与分栏路由的 `_PaneFrame` / `_PaneTeleport` 之前只监听
+不是响应式的：`EasySplitScope` 与分栏路由的 `EasySplitPaneFrame` / `EasySplitPaneTeleport` 之前只监听
 `EasySplit.enabled`，改比例不会触发重建，demo 里「选择分栏比例」看起来没生效。
 
 修法：`EasySplitConfig` 增加 `layoutVersion`（`ValueNotifier<int>`），新增

@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// 这里锁住三条链路的结构稳定性：
 /// 1. [EasySplitScope]（首页包 Scope）
-/// 2. [EasySplitRoute] 的 `_PaneFrame` / `_PaneTeleport`（首页/详情是分栏路由）
+/// 2. [EasySplitRoute] 的 `EasySplitPaneFrame` / `EasySplitPaneTeleport`（首页/详情是分栏路由）
 /// 3. 自定义 `layoutBuilder`（结构无法固定，用稳定 GlobalKey 搬迁）
 void main() {
   setUp(() {
@@ -193,9 +193,9 @@ class _TabHome extends StatefulWidget {
   State<_TabHome> createState() => _TabHomeState();
 }
 
-class _TabHomeState extends State<_TabHome> with SingleTickerProviderStateMixin {
-  late final TabController _controller =
-      TabController(length: 2, vsync: this);
+class _TabHomeState extends State<_TabHome>
+    with SingleTickerProviderStateMixin {
+  late final TabController _controller = TabController(length: 2, vsync: this);
 
   @override
   void dispose() {

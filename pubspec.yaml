@@ -1,6 +1,6 @@
 name: easy_split
 description: "EasySplit: parallel-view split layout for foldables and tablets. One route stack; narrow screens stay full width, wide screens split into two panes, no page code changes."
-version: 0.2.0
+version: 0.2.1
 repository: https://github.com/flutter-open/easy_split
 topics:
   - foldable

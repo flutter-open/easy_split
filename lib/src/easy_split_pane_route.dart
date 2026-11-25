@@ -30,13 +30,33 @@ class EasySplitRoute<T> extends PageRoute<T>
     super.fullscreenDialog = false,
     super.allowSnapshotting = true,
     this.maintainState = true,
-  }) : _builder = builder;
+    RouteTransitionsBuilder? transitionsBuilder,
+    Duration? transitionDuration,
+    Duration? reverseTransitionDuration,
+  })  : _builder = builder,
+        _transitionsBuilder = transitionsBuilder,
+        _transitionDuration = transitionDuration,
+        _reverseTransitionDuration = reverseTransitionDuration;
 
   final WidgetBuilder _builder;
+  final RouteTransitionsBuilder? _transitionsBuilder;
+  final Duration? _transitionDuration;
+  final Duration? _reverseTransitionDuration;
 
   /// 是否保留被遮挡页面的状态（默认 true，与 MaterialPageRoute 一致）
   @override
   final bool maintainState;
+
+  /// 自定义转场时长（对应 go_router `CustomTransitionPage.transitionDuration`）；
+  /// null = 跟随主题的 `PageTransitionsTheme`。
+  @override
+  Duration get transitionDuration =>
+      _transitionDuration ?? super.transitionDuration;
+
+  /// 自定义返回转场时长（对应 go_router `CustomTransitionPage.reverseTransitionDuration`）。
+  @override
+  Duration get reverseTransitionDuration =>
+      _reverseTransitionDuration ?? super.reverseTransitionDuration;
 
   @override
   bool get opaque => false;
@@ -68,8 +88,8 @@ class EasySplitRoute<T> extends PageRoute<T>
   Widget buildContent(BuildContext context) {
     // 路由级命中裁剪：宽屏分栏时，整条路由只允许在右栏矩形内命中，
     // 左栏区域 100% 穿透到底部路由（不受业务页面内部结构影响）
-    return _PaneHitTestScope(
-      child: _PaneTeleport(child: _builder(context)),
+    return EasySplitPaneHitTest(
+      child: EasySplitPaneTeleport(child: _builder(context)),
     );
   }
 
@@ -99,19 +119,27 @@ class EasySplitRoute<T> extends PageRoute<T>
     //   · 从右栏左缘右滑 → 毫无反应（用户直觉的位置反而失效）
     // buildContent 内部的 hitTest 裁剪管不到这一层。
     //
-    // 所以这里先按主题/平台产出原始转场，再由 _PaneFrame 统一套上位置与
+    // 所以这里先按主题/平台产出原始转场，再由 EasySplitPaneFrame 统一套上位置与
     // 尺寸：整棵转场子树（含手势层）都在 pane 约束内布局。副作用同样正向：
     // 转场动画只在右栏内播放，不再横扫左栏；Cupertino 的拖拽进度按 pane
     // 宽度换算（手势与动画 1:1 跟手）。
-    final transition = Theme.of(context).pageTransitionsTheme
-        .buildTransitions<dynamic>(
-      this,
-      context,
-      animation,
-      kAlwaysDismissedAnimation,
-      child,
-    );
-    return _PaneFrame(child: transition);
+    // 优先使用调用方给的转场（go_router 的 CustomTransitionPage 等）；
+    // 否则走主题/平台的原生 Material 转场。
+    final Widget transition = _transitionsBuilder != null
+        ? _transitionsBuilder!(
+            context,
+            animation,
+            kAlwaysDismissedAnimation,
+            child,
+          )
+        : Theme.of(context).pageTransitionsTheme.buildTransitions<dynamic>(
+              this,
+              context,
+              animation,
+              kAlwaysDismissedAnimation,
+              child,
+            );
+    return EasySplitPaneFrame(child: transition);
   }
 }
 
@@ -139,6 +167,7 @@ class EasySplitRoute<T> extends PageRoute<T>
 /// ```
 class EasySplitPage<T> extends Page<T> {
   EasySplitPage({
+    super.key,
     required WidgetBuilder child,
     super.name,
     super.arguments,
@@ -148,12 +177,25 @@ class EasySplitPage<T> extends Page<T> {
     this.fullscreenDialog = false,
     this.allowSnapshotting = true,
     this.requestFocus,
+    this.transitionsBuilder,
+    this.transitionDuration,
+    this.reverseTransitionDuration,
   }) : _child = child;
 
   final WidgetBuilder _child;
 
   /// true = 任何宽度都全屏（原生 MaterialPageRoute）
   final bool fullscreen;
+
+  /// 自定义分栏转场（如 go_router `CustomTransitionPage` 的转场）；
+  /// null = 使用主题/平台的原生 Material 转场。
+  final RouteTransitionsBuilder? transitionsBuilder;
+
+  /// 自定义转场时长；null = 跟随主题默认值。
+  final Duration? transitionDuration;
+
+  /// 自定义返回转场时长；null = 跟随主题默认值。
+  final Duration? reverseTransitionDuration;
 
   /// 是否保留被遮挡页面的状态（透传给底层路由，默认 true）
   final bool maintainState;
@@ -189,16 +231,22 @@ class EasySplitPage<T> extends Page<T> {
       fullscreenDialog: fullscreenDialog,
       allowSnapshotting: allowSnapshotting,
       requestFocus: requestFocus,
+      transitionsBuilder: transitionsBuilder,
+      transitionDuration: transitionDuration,
+      reverseTransitionDuration: reverseTransitionDuration,
     );
   }
 }
 
 /// 路由级命中裁剪盒：
-/// 宽屏分栏时，把本路由的命中测试严格限制在右栏矩形 [paneRect] 内，
+/// 宽屏分栏时，把本路由的命中测试严格限制在右栏矩形 `paneRect` 内，
 /// 矩形之外（左栏区域）直接返回 false → 点击穿透到底部路由。
 /// 这样即使业务页面内部有全屏 Material/Container，也无法挡住左栏。
-class _PaneHitTestScope extends SingleChildRenderObjectWidget {
-  const _PaneHitTestScope({required super.child});
+///
+/// 供路由库适配器复用：自定义 `PageRoute` 的 `buildContent` 用它包住内容，
+/// 即可获得与 [EasySplitRoute] 一致的左栏点击穿透行为。
+class EasySplitPaneHitTest extends SingleChildRenderObjectWidget {
+  const EasySplitPaneHitTest({super.key, required super.child});
 
   @override
   RenderObject createRenderObject(BuildContext context) {
@@ -234,7 +282,7 @@ class _RenderPaneHitTest extends RenderProxyBox {
     final rect = _paneRect;
     if (rect != null) {
       // paneRect 是全局坐标，position 是本渲染对象的局部坐标，必须先换算：
-      // 宽屏下本对象已被 _PaneFrame 缩进右栏，两者不再相等。
+      // 宽屏下本对象已被 EasySplitPaneFrame 缩进右栏，两者不再相等。
       if (!rect.contains(localToGlobal(position))) {
         return false; // 左栏区域：本路由完全不参与命中 → 穿透
       }
@@ -252,8 +300,11 @@ class _RenderPaneHitTest extends RenderProxyBox {
 /// 窄屏（折叠态）同样经过 Padding + SizedBox，只是矩形为整屏：
 /// 结构恒定，展开/折叠时路由内容 element 原地复用，
 /// 首页/详情页 State、Focus、滚动位置都不会因切换而重建。
-class _PaneFrame extends StatelessWidget {
-  const _PaneFrame({required this.child});
+///
+/// 供路由库适配器复用：自定义 `PageRoute` 的 `buildTransitions` 产出转场后，
+/// 用它包一层，即可把整条转场（含手势层）缩进右栏。
+class EasySplitPaneFrame extends StatelessWidget {
+  const EasySplitPaneFrame({super.key, required this.child});
 
   final Widget child;
 
@@ -294,14 +345,17 @@ class _PaneFrame extends StatelessWidget {
   }
 }
 
-/// 右栏面板装饰 + 安全区处理（位置/尺寸由 [_PaneFrame] 决定）
+/// 右栏面板装饰 + 安全区处理（位置/尺寸由 [EasySplitPaneFrame] 决定）
 ///
-/// 与 [_PaneFrame] 同理：窄屏也走同一套 widget 链（装饰为空、内边距为零），
+/// 与 [EasySplitPaneFrame] 同理：窄屏也走同一套 widget 链（装饰为空、内边距为零），
 /// 仅参数不同 —— 折叠/展开不会重建路由内容。
-class _PaneTeleport extends StatelessWidget {
+///
+/// 供路由库适配器复用：自定义 `PageRoute` 的 `buildContent` 用它包住内容，
+/// 即可获得与 [EasySplitRoute] 一致的右栏装饰、安全区与面板 `MediaQuery`。
+class EasySplitPaneTeleport extends StatelessWidget {
   final Widget child;
 
-  const _PaneTeleport({required this.child});
+  const EasySplitPaneTeleport({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
