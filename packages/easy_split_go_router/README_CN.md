@@ -199,6 +199,57 @@ final router = GoRouter(
 `redirect` 只能返回位置字符串，因此目标参数必须是路径参数（`/detail/:index`）而不是 `extra`，
 否则位置被重写时参数会丢失。
 
+## 混合导航（裸 push、参数化页面、浮层）
+
+go_router 只管理经过路由表的页面。`Navigator.push(MaterialPageRoute(...))`、`onGenerateRoute` 解析的
+`pushNamed`、以及直接插进 root `Overlay` 的浮层，EasySplit 都看不到——宽屏时它们会盖住整个窗口。
+三种做法把这些入口管住：
+
+1. **debug 审计。** 注册 `EasySplit.auditObserver`，凡是 EasySplit 接管不了的路由（裸 `PageRoute`、
+   不是 `EasySplitPage`、也不在 `EasySplit.fullscreenRoutes` 里）都会打一条带 name 和类型的告警，
+   漏网点在开发期就能看到，而不是等测试提 bug：
+
+   ```dart
+   final router = GoRouter(
+     routes: [...],
+     observers: [EasySplit.auditObserver],
+   );
+   ```
+
+2. **用一条参数化路由，而不是复制 N 份。** `matchedLocation` 不含 query，去重比较的是 name +
+   `arguments`，所以参数放 `extra`：
+
+   ```dart
+   class WebViewArgs {
+     const WebViewArgs({required this.url, this.headers = const {}, this.fullscreen = false});
+     final String url;
+     final Map<String, String> headers;
+     final bool fullscreen;
+     // 值相等，才能让「同 url + 同 header」命中默认去重
+     @override
+     bool operator ==(Object other) => ...;
+     @override
+     int get hashCode => ...;
+   }
+
+   EasySplitGoRoute(
+     path: '/webview',
+     pageBuilder: (context, state) => EasySplitPage(
+       fullscreen: WebViewArgs.fromExtra(state.extra).fullscreen,
+       child: (_) => WebViewPage(args: WebViewArgs.fromExtra(state.extra)),
+     ),
+   )
+   ```
+
+   调用方统一走一个 `openWebView` 帮助方法，就不会漏传 fullscreen。
+
+3. **按栏约束浮层。** `EasySplit.showPaneOverlay(context, side: ..., builder: ...)` 返回一个已经
+   贴到左/右栏、并在缩放/折叠时自动重排的 `OverlayEntry`；`EasySplit.paneOverlayEntry` 只创建不
+   插入。需要夹在页面之间的浮层（例如「二楼」页面下的底导遮罩），挂到该页面自己的 `Stack` 里。
+
+`example/lib/main_mixed.dart` 三种都演示了（`flutter run -t lib/main_mixed.dart`），
+`test/mixed_navigation_test.dart` 断言了栏矩形、去重与浮层几何。
+
 ## 已知限制
 
 - `ShellRoute` / `StatefulShellRoute` 内的页面暂不参与去重，保持原生行为。
@@ -209,7 +260,8 @@ final router = GoRouter(
 
 ```bash
 cd example
-flutter run
+flutter run                          # 广告页 -> 首页 -> 详情页 -> 对话框
+flutter run -t lib/main_mixed.dart   # 混合导航：参数化 /webview + 浮层 + 审计
 ```
 
 `example/lib/main.dart` 是完整的「广告页 -> 首页 -> 详情页 -> 对话框」示例。登录拦截使用
@@ -219,7 +271,8 @@ GoRouter 的 `redirect` + `refreshListenable`：未登录访问 `/detail/:index`
 「Split settings」卡片可在并排、内容在左、垂直和悬浮窗格布局之间切换，并在运行时调整窗格比例
 （通过 `EasySplit.updateLayout()`，与路由方案无关）；`test/go_route_dedupe_test.dart` 覆盖宽屏
 与窄屏去重、全局开关、自定义 `sameRoute` 和按路由关闭；`example/test/on_enter_dedupe_test.dart`
-覆盖 `onEnter` 拦截方案。
+覆盖 `onEnter` 拦截方案；`example/test/mixed_navigation_test.dart` 覆盖混合导航入口（栏矩形、按内容
+去重、按栏约束的浮层）。
 
 ## 许可证
 

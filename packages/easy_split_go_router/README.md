@@ -214,6 +214,59 @@ When login completes, use `router.pushReplacement(from)` to replace the login pa
 parameters must be path parameters (`/detail/:index`) rather than `extra`, otherwise they are lost when
 the location is rewritten.
 
+## Mixed navigation (raw pushes, parameterized pages, overlays)
+
+go_router only manages pages that go through the route table. Anything pushed with
+`Navigator.push(MaterialPageRoute(...))`, resolved by `onGenerateRoute`, or inserted straight into the
+root `Overlay` is invisible to EasySplit - on a wide screen it covers the whole window. Three patterns
+keep those entry points under control:
+
+1. **Audit in debug builds.** Register `EasySplit.auditObserver`; every route EasySplit cannot pane
+   (bare `PageRoute`, not `EasySplitPage`, not in `EasySplit.fullscreenRoutes`) logs one warning with
+   its name and type, so leaks show up while you navigate instead of in QA:
+
+   ```dart
+   final router = GoRouter(
+     routes: [...],
+     observers: [EasySplit.auditObserver],
+   );
+   ```
+
+2. **One parameterized route instead of N copies.** `matchedLocation` contains no query string, and
+   dedupe compares route name + `arguments`, so pass the payload in `extra`:
+
+   ```dart
+   class WebViewArgs {
+     const WebViewArgs({required this.url, this.headers = const {}, this.fullscreen = false});
+     final String url;
+     final Map<String, String> headers;
+     final bool fullscreen;
+     // value equality is what makes "same url + same headers" dedupe work
+     @override
+     bool operator ==(Object other) => ...;
+     @override
+     int get hashCode => ...;
+   }
+
+   EasySplitGoRoute(
+     path: '/webview',
+     pageBuilder: (context, state) => EasySplitPage(
+       fullscreen: WebViewArgs.fromExtra(state.extra).fullscreen,
+       child: (_) => WebViewPage(args: WebViewArgs.fromExtra(state.extra)),
+     ),
+   )
+   ```
+
+   Call sites then share one helper (`openWebView`) and cannot forget the fullscreen flag.
+
+3. **Overlays per pane.** `EasySplit.showPaneOverlay(context, side: ..., builder: ...)` returns an
+   `OverlayEntry` already constrained to the left/right pane and re-laid out on resize or fold;
+   `EasySplit.paneOverlayEntry` does the same without inserting. Attach overlays that must sit between
+   pages (e.g. under the "second floor" page) to that page's own `Stack` instead.
+
+`example/lib/main_mixed.dart` runs all three (`flutter run -t lib/main_mixed.dart`), and
+`test/mixed_navigation_test.dart` asserts the pane rect, the dedupe and the overlay geometry.
+
 ## Known limitations
 
 - Pages inside `ShellRoute` / `StatefulShellRoute` do not participate in deduplication yet and keep their
@@ -225,7 +278,8 @@ the location is rewritten.
 
 ```bash
 cd example
-flutter run
+flutter run                          # ad -> home -> detail -> dialogs
+flutter run -t lib/main_mixed.dart   # mixed navigation: parameterized /webview + overlays + audit
 ```
 
 `example/lib/main.dart` is the full ad page -> home -> detail -> dialogs demo. The login guard uses
@@ -236,7 +290,8 @@ original target (see `_guard` in `example/lib/main.dart` and `DemoAuth` / `Login
 floating layouts and adjusts the pane ratio at runtime (via `EasySplit.updateLayout()`, independent of the
 routing scheme); `test/go_route_dedupe_test.dart` covers deduplication on wide and narrow screens, the
 global switch, a custom `sameRoute` and per-route opt-out; `example/test/on_enter_dedupe_test.dart` covers
-the `onEnter` interception variant.
+the `onEnter` interception variant; `example/test/mixed_navigation_test.dart` covers the mixed-navigation
+entry (pane rect, content-based dedupe, pane-constrained overlays).
 
 ## License
 

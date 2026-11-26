@@ -5,13 +5,17 @@ import 'dart:ui' show DisplayFeatureType, PlatformDispatcher;
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
+import 'src/easy_split_audit_observer.dart';
 import 'src/easy_split_dedupe_observer.dart';
+import 'src/easy_split_pane_overlay.dart';
 import 'src/easy_split_pane_route.dart';
 import 'src/easy_split_scope.dart';
 import 'src/easy_split_router_delegate.dart';
 import 'src/easy_split_window.dart';
 
+export 'src/easy_split_audit_observer.dart';
 export 'src/easy_split_dedupe_observer.dart';
+export 'src/easy_split_pane_overlay.dart';
 export 'src/easy_split_pane_route.dart';
 export 'src/easy_split_scope.dart';
 export 'src/easy_split_router_delegate.dart';
@@ -239,6 +243,71 @@ class EasySplit {
   /// ```
   /// MaterialApp.router 方案（[EasySplitRouterDelegate]）已内置，无需添加。
   static NavigatorObserver get dedupeObserver => EasySplitDedupeObserver();
+
+  /// 裸路由审计（debug）：把「easy_split 无法接管」的入栈打印出来
+  ///
+  /// 裸 `Navigator.push(MaterialPageRoute(...))` 在分栏下会整窗全屏，
+  /// 且绕过 go_router 的 redirect / URL 同步 / 去重。开发期挂上本 observer
+  /// 即可把漏网点全部打出来（release 静默）：
+  /// ```dart
+  /// GoRouter(
+  ///   routes: [...],
+  ///   observers: [EasySplit.dedupeObserver, EasySplit.auditObserver],
+  /// )
+  /// ```
+  /// 详见 [EasySplitAuditObserver] 的判定规则。
+  static NavigatorObserver get auditObserver => EasySplitAuditObserver();
+
+  /// 生成一个「限制在某一栏」的 [OverlayEntry]（不插入，由调用方 insert/remove）
+  ///
+  /// 直接插入的 OverlayEntry 按整窗布局，分栏下会盖住左栏；用本方法生成的
+  /// entry 会贴住 [side] 对应的矩形，窗口缩放/展开折叠时自动重排。
+  /// ```dart
+  /// final entry = EasySplit.paneOverlayEntry(
+  ///   side: EasySplitPaneSide.right,
+  ///   ignorePointer: true,
+  ///   builder: (_) => const ColoredBox(color: Colors.black54),
+  /// );
+  /// Overlay.of(context, rootOverlay: true).insert(entry);
+  /// ```
+  ///
+  /// 注意：root Overlay 里的浮层永远在所有路由之上；需要夹在页面之间的
+  /// 浮层请挂到页面自己的 Stack（见 [EasySplitPaneOverlay] 说明）。
+  static OverlayEntry paneOverlayEntry({
+    required WidgetBuilder builder,
+    EasySplitPaneSide side = EasySplitPaneSide.right,
+    bool ignorePointer = false,
+    bool maintainState = false,
+  }) {
+    return OverlayEntry(
+      maintainState: maintainState,
+      builder: (BuildContext context) => EasySplitPaneOverlay(
+        side: side,
+        ignorePointer: ignorePointer,
+        child: Builder(builder: builder),
+      ),
+    );
+  }
+
+  /// 在 root Overlay 上显示一个「限制在某一栏」的浮层，返回 entry
+  ///
+  /// 用完自己移除：`entry.remove()`（浮层内的关闭按钮同样需要持有 entry）。
+  static OverlayEntry showPaneOverlay(
+    BuildContext context, {
+    required WidgetBuilder builder,
+    EasySplitPaneSide side = EasySplitPaneSide.right,
+    bool ignorePointer = false,
+    bool maintainState = false,
+  }) {
+    final OverlayEntry entry = paneOverlayEntry(
+      builder: builder,
+      side: side,
+      ignorePointer: ignorePointer,
+      maintainState: maintainState,
+    );
+    Overlay.of(context, rootOverlay: true).insert(entry);
+    return entry;
+  }
 
   // ---- 核心逻辑 ----
 

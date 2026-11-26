@@ -209,6 +209,59 @@ final data = EasySplit.paneMediaQuery(
 );
 ```
 
+### 6. Mixed navigation: pushes and overlays outside go_router
+
+Real apps always keep a few entry points outside the route table: `Navigator.push(MaterialPageRoute(...))`,
+`Navigator.pushNamed` handled by `onGenerateRoute`, and overlays inserted straight into the `Overlay`.
+EasySplit cannot take those over automatically - a bare `PageRoute` has no name, so on a wide screen it
+stays full screen. Two SDK pieces make the leaks visible / keep them inside a pane:
+
+```dart
+final router = GoRouter(
+  routes: [...],
+  // 1) Audit: in debug builds, warn whenever a route EasySplit does not manage is pushed
+  observers: [EasySplit.auditObserver],
+);
+```
+
+```dart
+// 2) Overlays: constrain an OverlayEntry to one pane; it re-lays out on resize / fold
+final entry = EasySplit.showPaneOverlay(
+  context,
+  side: EasySplitPaneSide.right,      // left = the pane that hosts the home page
+  builder: (_) => MyMask(),
+);
+entry.remove();                       // remove it yourself when done
+```
+
+`EasySplit.paneOverlayEntry` only creates the entry (insert it with `Overlay.of(context).insert`);
+`EasySplitPaneOverlay` is the underlying widget if you already have an `OverlayEntry`.
+
+> An entry in the root `Overlay` always sits above every route. If the overlay must sit between pages
+> (e.g. the bottom-nav mask under the "second floor" page), attach it to that page's own `Stack`.
+
+**Parameterized pages** are the most common trap: a dozen WebView entry points open the same page with
+different url / headers. Use one route plus `extra` (go_router's `matchedLocation` has no query, and
+dedupe compares name + arguments, so parameters belong in `extra`):
+
+```dart
+EasySplitGoRoute(
+  path: '/webview',
+  pageBuilder: (context, state) {
+    final args = WebViewArgs.fromExtra(state.extra);
+    return EasySplitPage(
+      fullscreen: args.fullscreen,   // payment / risk-control entries stay full screen
+      child: (_) => WebViewPage(args: args),
+    );
+  },
+)
+```
+
+Once `WebViewArgs` implements value equality, opening the same url + headers twice is deduplicated
+(deep comparison by default). Runnable example:
+`packages/easy_split_go_router/example/lib/main_mixed.dart`; per-entry checklist:
+[doc/split-screen-migration.md](doc/split-screen-migration.md).
+
 ## Project layout
 
 ```
@@ -217,8 +270,10 @@ lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
 lib/src/easy_split_scope.dart            EasySplitScope split container
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate (MaterialApp.router)
 lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver (one-line dedupe for onGenerateRoute)
+lib/src/easy_split_audit_observer.dart   EasySplitAuditObserver (debug warning for routes EasySplit cannot pane)
+lib/src/easy_split_pane_overlay.dart     EasySplitPaneOverlay (constrain an overlay to one pane)
 lib/src/easy_split_window.dart           Window metrics + pane-scoped MediaQuery (internal)
-test/                                    47 behavior tests (gestures, routing, dedupe, params, live layout, pane size)
+test/                                    50+ behavior tests (gestures, routing, dedupe, params, live layout, pane size)
 packages/easy_split_go_router/            go_router adapter (separate package)
 packages/easy_split_getx/                 GetX adapter (separate package, classic + Navigator 2.0)
 packages/easy_split_demo/                Demo pages shared by both example entries

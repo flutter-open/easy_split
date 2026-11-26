@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- `EasySplit.auditObserver` / `EasySplitAuditObserver`: in debug builds it logs one warning for every
+  route EasySplit cannot pane (a bare `PageRoute` that is not an `EasySplitPage` and is not listed in
+  `EasySplit.fullscreenRoutes`), so mixed navigation leaks show up while developing. Silent in
+  release, when `EasySplit.enabled` is off, and for routes already marked full screen.
+- `EasySplit.paneOverlayEntry` / `EasySplit.showPaneOverlay` / `EasySplitPaneOverlay`: constrain an
+  `OverlayEntry` to the left or right pane. The overlay tracks `layoutVersion` and re-lays out on
+  window resize, fold/unfold and `paneRatio` changes; taps outside the pane pass through. Overlays
+  in the root `Overlay` still sit above every route, so masks that must sit between pages should be
+  attached to that page's own `Stack`.
+- Example `packages/easy_split_go_router/example/lib/main_mixed.dart` (+
+  `test/mixed_navigation_test.dart`): one parameterized `/webview` route with url/header/fullscreen in
+  `extra`, pane-constrained overlays and the audit observer.
+- `doc/split-screen-migration.md`: a per-entry migration checklist for apps that mix go_router with
+  raw `Navigator` pushes and overlays.
+
 ### Fixed
 
 - Duplicate-route deduplication now compares `RouteSettings.arguments` by content instead of by

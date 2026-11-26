@@ -199,6 +199,57 @@ final data = EasySplit.paneMediaQuery(
 );
 ```
 
+### 6. 混合导航：go_router 之外的 push 与浮层
+
+真实工程里总有一部分入口绕开路由表：`Navigator.push(MaterialPageRoute(...))`、`Navigator.pushNamed`
+（`onGenerateRoute`）、以及直接插到 Overlay 的浮层。这些页面 EasySplit 无法自动接管——裸 `PageRoute`
+没有 name，分栏时只能整窗显示。SDK 提供两个能力来把它们暴露出来 / 收进栏内：
+
+```dart
+final router = GoRouter(
+  routes: [...],
+  // 1) 审计：debug 下任何「非 easy_split 路由」入栈都会打一条告警，把漏网点打出来
+  observers: [EasySplit.auditObserver],
+);
+```
+
+```dart
+// 2) 浮层：把 OverlayEntry 约束到某一栏，窗口缩放 / 展开折叠自动重排
+final entry = EasySplit.showPaneOverlay(
+  context,
+  side: EasySplitPaneSide.right,      // left = 首页那一栏
+  builder: (_) => MyMask(),           // 内容按栏矩形布局
+);
+entry.remove();                       // 用完自己移除
+```
+
+`EasySplit.paneOverlayEntry` 只创建不插入（需要自己 `Overlay.of(context).insert`）；
+`EasySplitPaneOverlay` 是底层 widget，可以包在已有的 `OverlayEntry` 里。
+
+> root Overlay 里的浮层永远在所有路由之上。要夹在页面之间（例如「二楼」页面下的底导遮罩），
+> 请把浮层挂到该页面自己的 Stack，而不是用 Overlay。
+
+**参数化页面**是混合导航最常见的坑：十几个 WebView 入口指向同一个页面，只是 url / header 不同。
+推荐一条路由 + `extra` 传参（`go_router` 的 `matchedLocation` 不含 query，去重按 name + arguments
+比较，所以参数必须放 `extra`）：
+
+```dart
+EasySplitGoRoute(
+  path: '/webview',
+  pageBuilder: (context, state) {
+    final args = WebViewArgs.fromExtra(state.extra);
+    return EasySplitPage(
+      fullscreen: args.fullscreen,   // 支付/风控等个别入口整窗
+      child: (_) => WebViewPage(args: args),
+    );
+  },
+)
+```
+
+`WebViewArgs` 实现值相等后，同 url + 同 header 的重复打开会自动去重（默认深比较）。
+完整可运行示例见 `packages/easy_split_go_router/example/lib/main_mixed.dart`；
+逐条入口的改造清单见 [doc/split-screen-migration.md](doc/split-screen-migration.md)。
+
 ## 项目结构
 
 ```
@@ -207,8 +258,10 @@ lib/src/easy_split_pane_route.dart       EasySplitRoute / EasySplitPage
 lib/src/easy_split_scope.dart            EasySplitScope 分屏容器
 lib/src/easy_split_router_delegate.dart  EasySplitRouterDelegate（MaterialApp.router）
 lib/src/easy_split_dedupe_observer.dart  EasySplitDedupeObserver（onGenerateRoute 一行接入去重）
+lib/src/easy_split_audit_observer.dart   EasySplitAuditObserver（debug 告警：裸路由无法分栏）
+lib/src/easy_split_pane_overlay.dart     EasySplitPaneOverlay（把浮层约束到某一栏）
 lib/src/easy_split_window.dart           整窗几何 + 窗格 MediaQuery（内部实现）
-test/                                    47 个行为测试（手势、路由、去重、参数、实时布局、窗格尺寸）
+test/                                    50+ 个行为测试（手势、路由、去重、参数、实时布局、窗格尺寸）
 packages/easy_split_go_router/            go_router 适配包
 packages/easy_split_getx/                 GetX 适配包（经典模式 + Navigator 2.0）
 packages/easy_split_demo/                两个 example 入口共用的演示包

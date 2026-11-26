@@ -6,16 +6,18 @@
 > 这是 demo，不发布到 pub.dev。包本身的说明见
 > [easy_split_go_router](https://pub.dev/packages/easy_split_go_router)。
 
-## 两个入口
+## 三个入口
 
-| 入口 | 去重方式 | 说明 |
+| 入口 | 关注点 | 说明 |
 | --- | --- | --- |
-| `lib/main.dart` | `EasySplitGoRoute` 内置（`dedupe: true`） | 默认推荐，go_router 13 及以上可用；重复 push 时在帧末收敛并把已有页面置顶 |
-| `lib/main_on_enter.dart` | go_router 16.3+ 的 `onEnter` + `easySplitIsDuplicate` / `easySplitDedupeAction` | 在入栈前判断重复：已在栈顶直接拦掉，栈内已有则入栈后收敛为「置顶」 |
+| `lib/main.dart` | 基础接入 + 去重 | `EasySplitGoRoute` 内置去重（`dedupe: true`），默认推荐，go_router 13 及以上可用；重复 push 时在帧末收敛并把已有页面置顶 |
+| `lib/main_on_enter.dart` | 入栈前去重 | go_router 16.3+ 的 `onEnter` + `easySplitIsDuplicate` / `easySplitDedupeAction`：已在栈顶直接拦掉，栈内已有则入栈后收敛为「置顶」 |
+| `lib/main_mixed.dart` | 混合导航 | 一条参数化 `/webview` 路由 + `extra`（url/header/fullscreen）、按栏约束的浮层、`EasySplit.auditObserver` 抓裸路由 |
 
 ```bash
-flutter run -t lib/main.dart            # 内置去重
+flutter run -t lib/main.dart            # 基础接入 + 内置去重
 flutter run -t lib/main_on_enter.dart   # onEnter 拦截（需要 go_router >= 16.3.0）
+flutter run -t lib/main_mixed.dart      # 混合导航（参数化页 / 浮层 / 审计）
 ```
 
 本示例的 `pubspec.yaml` 把 go_router 约束在 `>=16.3.0`（为了 `onEnter`）；
@@ -41,6 +43,16 @@ flutter run -t lib/main_on_enter.dart   # onEnter 拦截（需要 go_router >= 1
 - **一级页 `DetailPage`**：用路径参数 `/detail/:index` 取列表项，显示当前登录用户，可进二级页；
 - **二级页 `SecondaryPage`**、**弹窗大全 `DialogsPage`**。
 
+`lib/main_mixed.dart`（混合导航）：
+
+- **参数化页**：`WebViewArgs`（url / headers / fullscreen）放 `extra`，一条 `/webview` 路由覆盖所有
+  H5 入口；值相等（`mapEquals`）让「同 url + 同 header」连点两次只保留一页；
+- **显式全屏**：`EasySplitPage(fullscreen: ...)` 处理支付/风控这类必须整窗的 H5，不依赖
+  `fullscreenRoutes`（`matchedLocation` 不含 query，白名单匹配不上带参数的地址）；
+- **按栏浮层**：`EasySplit.showPaneOverlay(side: left/right)`，缩放 / 折叠时自动重排；
+- **审计**：`observers: [EasySplit.auditObserver]`，点「裸 push」那条会看到告警，说明该入口分栏
+  接管不了。
+
 ## 测试
 
 ```bash
@@ -49,7 +61,9 @@ flutter test
 
 - `test/demo_layout_test.dart`：分栏设置弹窗的四种布局、比例拖动、恢复默认；
 - `test/on_enter_dedupe_test.dart`：`onEnter` 拦截版——登录后进入详情页、重复 push 同一页不压栈、
-  不同页面正常压栈。
+  不同页面正常压栈；
+- `test/mixed_navigation_test.dart`：混合导航——同 url 同 header 去重且落在右栏、不同 header 正常叠页、
+  整窗 H5 铺满、浮层按左右栏约束并在折叠后铺满。
 
 ## 换到自己的项目
 
