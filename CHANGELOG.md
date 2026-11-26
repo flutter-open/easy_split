@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Duplicate-route deduplication now compares `RouteSettings.arguments` by content instead of by
+  reference. `Map` / `List` arguments are compared recursively (nested maps such as `headerMap`
+  included), so pushing the same page with a freshly built but equal argument map — e.g. tapping
+  the same H5 link twice, or a go_router `extra` map — is deduplicated again. The comparison is
+  budgeted (12 levels / 256 nodes) and fails closed (treated as different) on deeper, oversized or
+  self-referencing arguments, so it can neither mis-dedupe nor overflow the stack. The same default
+  is used by `EasySplit.dedupeObserver`, `EasySplitRouterDelegate` and `easy_split_go_router`, and is
+  exposed as `easySplitSameRoute` / `easySplitArgumentsEqual`.
+
 ## 0.2.1
 
 ### Added

@@ -58,7 +58,27 @@ void main() {
     expect(find.text('DETAIL:a'), findsNothing);
   });
 
-  testWidgets('关闭 EasySplit.config.dedupeRepeatedRoutes 后恢复原生行为', (tester) async {
+  testWidgets('extra 是内容相同的 Map（不同实例）也只保留一页', (tester) async {
+    await _pump(tester);
+    _goHome(tester);
+
+    router.push('/detail', extra: {
+      'id': 1,
+      'meta': {'tab': 'a'},
+    });
+    await tester.pumpAndSettle();
+    expect(_depth, 2);
+
+    router.push('/detail', extra: {
+      'meta': {'tab': 'a'},
+      'id': 1,
+    });
+    await tester.pumpAndSettle();
+    expect(_depth, 2);
+  });
+
+  testWidgets('关闭 EasySplit.config.dedupeRepeatedRoutes 后恢复原生行为',
+      (tester) async {
     EasySplit.config.dedupeRepeatedRoutes = false;
     await _pump(tester);
     _goHome(tester);

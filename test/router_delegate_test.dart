@@ -17,8 +17,7 @@ class _AdPage extends StatelessWidget {
     return Scaffold(
       body: Center(
         child: TextButton(
-          onPressed: () =>
-              Navigator.pushReplacementNamed(context, '/home'),
+          onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
           child: const Text('GO_HOME'),
         ),
       ),
@@ -189,8 +188,7 @@ Future<void> _goDetail(WidgetTester tester) async {
 }
 
 /// 导航栈深度（每个页面一个 Scaffold）
-int _stackDepth(WidgetTester tester) =>
-    find.byType(Scaffold).evaluate().length;
+int _stackDepth(WidgetTester tester) => find.byType(Scaffold).evaluate().length;
 
 void main() {
   setUp(() {
@@ -284,7 +282,8 @@ void main() {
       expect(find.text(_placeholder), findsOneWidget);
     });
 
-    testWidgets('delegate.push / pop 等值于 Navigator.pushNamed / pop', (tester) async {
+    testWidgets('delegate.push / pop 等值于 Navigator.pushNamed / pop',
+        (tester) async {
       late EasySplitRouterDelegate delegate;
       await _pump(
         tester,
@@ -400,6 +399,46 @@ void main() {
       expect(_stackDepth(tester), 1);
     });
 
+    testWidgets('Map 参数结构相等（键顺序不同）也视为同一页', (tester) async {
+      late EasySplitRouterDelegate delegate;
+      await _pump(tester,
+          widget: _DelegateApp(onDelegate: (d) => delegate = d));
+      await _goHome(tester);
+
+      delegate.push('/detail', arguments: {
+        'id': 1,
+        'meta': {'tab': 'a'},
+      });
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2);
+
+      delegate.push('/detail', arguments: {
+        'meta': {'tab': 'a'},
+        'id': 1,
+      });
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 2);
+    });
+
+    testWidgets('Map 参数深层值不同：照常压栈', (tester) async {
+      late EasySplitRouterDelegate delegate;
+      await _pump(tester,
+          widget: _DelegateApp(onDelegate: (d) => delegate = d));
+      await _goHome(tester);
+
+      delegate.push('/detail', arguments: {
+        'id': 1,
+        'meta': {'tab': 'a'},
+      });
+      await tester.pumpAndSettle();
+      delegate.push('/detail', arguments: {
+        'id': 1,
+        'meta': {'tab': 'b'},
+      });
+      await tester.pumpAndSettle();
+      expect(_stackDepth(tester), 3);
+    });
+
     testWidgets('自定义 sameRoute：按业务规则判定是否同一页面', (tester) async {
       EasySplit.config.sameRoute =
           (a, b) => a.name == '/detail' && b.name == '/detail';
@@ -420,7 +459,8 @@ void main() {
     testWidgets('关闭去重后恢复原生重复压栈', (tester) async {
       EasySplit.config.dedupeRepeatedRoutes = false;
       late EasySplitRouterDelegate delegate;
-      await _pump(tester, widget: _DelegateApp(onDelegate: (d) => delegate = d));
+      await _pump(tester,
+          widget: _DelegateApp(onDelegate: (d) => delegate = d));
       await _goHome(tester);
 
       await tester.tap(find.text('GO_DETAIL_A'));
@@ -469,7 +509,9 @@ void main() {
   });
 
   group('参数透传', () {
-    test('EasySplitRoute 透传 maintainState / fullscreenDialog / allowSnapshotting', () {
+    test(
+        'EasySplitRoute 透传 maintainState / fullscreenDialog / allowSnapshotting',
+        () {
       final route = EasySplitRoute<bool>(
         builder: (_) => const SizedBox(),
         maintainState: false,

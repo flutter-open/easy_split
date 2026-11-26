@@ -15,6 +15,7 @@ export 'src/easy_split_dedupe_observer.dart';
 export 'src/easy_split_pane_route.dart';
 export 'src/easy_split_scope.dart';
 export 'src/easy_split_router_delegate.dart';
+export 'src/route_equality.dart';
 
 /// 配置对象：所有 EasySplit 配置集中在这里（一层包装，符合 Flutter 传参习惯）
 ///
@@ -129,8 +130,9 @@ class EasySplitConfig {
 
   /// 判断两条路由是否"同一页面"（[dedupeRepeatedRoutes] 的匹配规则）
   ///
-  /// 默认：`a.name == b.name && a.arguments == b.arguments`。
-  /// 例如详情页想按业务 id 去重：
+  /// 默认见 [easySplitSameRoute]：`name` 相同且 `arguments` 按内容相等
+  /// （`Map` / `List` 递归比较，其余用 `==`；超出 12 层 / 256 个节点或
+  /// 遇到自引用时视为不同）。例如详情页想按业务 id 去重：
   /// ```dart
   /// EasySplit.config.sameRoute = (a, b) =>
   ///     a.name == '/detail' && (a.arguments as Item?)?.id ==

@@ -82,7 +82,9 @@ brought to the top instead.
 | Option 2, MaterialApp.router | **Automatic** (the delegate intercepts `pushNamed`) |
 | easy_split_getx, classic mode | Add `navigatorObservers: [EasySplit.dedupeObserver]` |
 
-"Same page" means the same `name + arguments` by default, and can be customized:
+"Same page" means the same `name` and structurally equal `arguments` by default (`Map` / `List`
+compared by content, up to 12 levels / 256 nodes; anything deeper or self-referencing is treated as
+different), and can be customized:
 
 ```dart
 EasySplit.config

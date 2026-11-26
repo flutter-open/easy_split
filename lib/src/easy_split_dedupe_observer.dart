@@ -45,7 +45,7 @@ class EasySplitDedupeObserver extends NavigatorObserver {
 
     if (!EasySplit.config.dedupeRepeatedRoutes || !route.isActive) return;
 
-    final same = EasySplit.config.sameRoute ?? _defaultSameRoute;
+    final same = EasySplit.config.sameRoute ?? easySplitSameRoute;
     Route<dynamic>? older;
     for (final candidate in routes.reversed) {
       if (identical(candidate, route) || !candidate.isActive) continue;
@@ -90,8 +90,4 @@ class EasySplitDedupeObserver extends NavigatorObserver {
         ..add(newRoute);
     }
   }
-
-  /// 默认匹配规则：name 相同且 arguments 相等
-  static bool _defaultSameRoute(RouteSettings a, RouteSettings b) =>
-      a.name == b.name && a.arguments == b.arguments;
 }

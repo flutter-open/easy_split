@@ -173,17 +173,13 @@ class _RouteTracker extends NavigatorObserver {
 
   /// 找到栈内与 [settings] 属于"同一页面"的路由（从栈顶往下找）
   Route<dynamic>? findSame(RouteSettings settings) {
-    final same = EasySplit.config.sameRoute ?? _defaultSameRoute;
+    final same = EasySplit.config.sameRoute ?? easySplitSameRoute;
     for (final route in _routes.reversed) {
       if (!route.isActive) continue;
       if (same(route.settings, settings)) return route;
     }
     return null;
   }
-
-  /// 默认匹配规则：name 相同且 arguments 相等
-  static bool _defaultSameRoute(RouteSettings a, RouteSettings b) =>
-      a.name == b.name && a.arguments == b.arguments;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {

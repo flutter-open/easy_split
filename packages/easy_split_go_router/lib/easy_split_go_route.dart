@@ -244,7 +244,7 @@ int _duplicateTargetIndex(RouteMatchList config) {
     return -1;
   }
   final bool Function(RouteSettings, RouteSettings) same =
-      EasySplit.config.sameRoute ?? _sameSettings;
+      EasySplit.config.sameRoute ?? easySplitSameRoute;
   for (var i = matches.length - 2; i >= 0; i--) {
     final RouteMatchBase candidate = matches[i];
     if (candidate is ShellRouteMatch) {
@@ -268,9 +268,6 @@ RouteSettings _settingsOf(RouteMatchList config, RouteMatchBase match) {
   }
   return RouteSettings(name: match.matchedLocation, arguments: config.extra);
 }
-
-bool _sameSettings(RouteSettings a, RouteSettings b) =>
-    a.name == b.name && a.arguments == b.arguments;
 
 /// 在一个 GoRouter 的 match 栈里查找与 [settings] 相同的分栏页面，返回其下标
 /// （没有则 -1）。
@@ -301,7 +298,7 @@ int easySplitDuplicateIndexOf(
   RouteSettings settings,
 ) {
   final bool Function(RouteSettings, RouteSettings) same =
-      EasySplit.config.sameRoute ?? _sameSettings;
+      EasySplit.config.sameRoute ?? easySplitSameRoute;
   for (var i = configuration.matches.length - 1; i >= 0; i--) {
     final RouteMatchBase match = configuration.matches[i];
     if (match is ShellRouteMatch) {
@@ -400,7 +397,7 @@ FutureOr<void> Function()? easySplitDedupeAction(
 /// 在栈内查找 [settings] 对应的页面，**跳过栈顶**（刚 push 进来的新页面）。
 int _duplicateIndexBelowTop(RouteMatchList configuration, RouteSettings settings) {
   final bool Function(RouteSettings, RouteSettings) sameRoute =
-      EasySplit.config.sameRoute ?? _sameSettings;
+      EasySplit.config.sameRoute ?? easySplitSameRoute;
   for (var i = configuration.matches.length - 2; i >= 0; i--) {
     final RouteMatchBase match = configuration.matches[i];
     if (match is ShellRouteMatch) {

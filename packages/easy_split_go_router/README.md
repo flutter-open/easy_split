@@ -92,7 +92,9 @@ is matched against the route path even when the returned page sets its own `name
 
 ## Duplicate-route deduplication
 
-On by default: after `/home -> /detail(a) -> /detail(b) -> /detail(a)` the stack only contains
+On by default: "the same page" means the same `name` and structurally equal `arguments` (`Map` /
+`List` compared by content, up to 12 levels / 256 nodes). After
+`/home -> /detail(a) -> /detail(b) -> /detail(a)` the stack only contains
 `[home, detail(a)]`; going back returns to the home page directly and `detail(b)` is not pushed twice.
 
 ```dart
@@ -101,9 +103,12 @@ EasySplitGoRoute(path: '/detail', dedupe: false, builder: ...)
 
 // Disable globally, or customize what counts as "the same page"
 // (shared with the other easy_split integration schemes).
+// The default already compares `arguments` by content; use `sameRoute` when the
+// match should follow a business id instead.
 EasySplit.config
   ..dedupeRepeatedRoutes = false
-  ..sameRoute = (a, b) => a.name == b.name && a.arguments == b.arguments;
+  ..sameRoute = (a, b) =>
+      a.name == b.name && (a.arguments as Map?)?['id'] == (b.arguments as Map?)?['id'];
 ```
 
 How it works: GoRouter handles `push` inside its own `RouteInformationProvider`, which cannot be

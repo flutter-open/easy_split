@@ -79,7 +79,8 @@ GetX 项目可以使用 [easy_split_getx](packages/easy_split_getx/) 适配包�
 | 方式二，MaterialApp.router | **自动生效**（delegate 拦截 `pushNamed`） |
 | easy_split_getx，经典模式 | 添加 `navigatorObservers: [EasySplit.dedupeObserver]` |
 
-默认「同一个页面」指 `name + arguments` 相同，也可以自定义：
+默认「同一个页面」指 `name` 相同且 `arguments` 内容相等（`Map` / `List` 递归比较，最多 12 层 /
+256 个节点，超出或自引用一律视为不同），也可以自定义：
 
 ```dart
 EasySplit.config

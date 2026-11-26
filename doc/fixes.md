@@ -101,6 +101,48 @@ void main() {
 
 ---
 
+## 3. 参数内容相同的重复路由没有去重
+
+### 症状
+
+同一个页面反复跳转（典型：左侧列表重复点击同一个 H5 条目、webview 路由），路由栈会越压越深，
+返回要按很多次。`dedupeRepeatedRoutes` 默认开启，但看起来"没生效"。
+
+### 根因
+
+默认 `sameRoute` 用 `a.arguments == b.arguments` 判等（3 处：`EasySplitDedupeObserver`、
+`EasySplitRouterDelegate`、`easy_split_go_router` 的 `_sameSettings`）。Dart 的 `Map` / `List`
+没有重写 `==`，比较的是引用；而每次跳转都会新构造一个内容相同的 `Map`
+（如 `{'url': ..., 'headerMap': {'token': ...}}`、go_router 的 `extra`），`==` 永远为 false，
+去重永远不命中。`String` / `num` 参数因为 `==` 是值比较，所以原有测试没暴露问题。
+
+### 修复
+
+新增共享判等 `lib/src/route_equality.dart`：
+
+- `easySplitSameRoute(RouteSettings a, RouteSettings b)`：`name` 相同 + `arguments` 结构相等，
+  替换三处重复的私有默认实现（DRY，三个入口行为一致）；
+- `easySplitArgumentsEqual(Object? a, Object? b)`：`Map` / `List` 递归按内容比较，其余类型用 `==`；
+- 预算：最多 12 层、256 个节点，超出即返回 `false`（fail-closed：宁可多压一页，也不误去重）；
+  自引用结构会在预算内提前截断，不会栈溢出；`identical` 快速路径不受预算影响。
+
+### 行为变化
+
+- 内容相同但实例不同的 `Map` / `List` 参数现在会被视为同一页面。以前能重复压栈的场景
+  （例如故意用相同参数打开两个独立实例）会被收敛，可用 `EasySplit.config.sameRoute`
+  自定义规则恢复，或 `dedupeRepeatedRoutes = false` 整体关闭。
+- 参数极深（>12 层）、元素极多（>256 个节点）或自引用的路由不会去重，但也不会报错 / 崩溃。
+
+### 回归用例
+
+- `test/route_equality_test.dart`（19 例）：name 判等、Map/List 内容与键顺序、嵌套差异、
+  自定义 `==` 类型、自引用、12 层 / 13 层边界、255 / 256 节点预算边界；
+- `test/dedupe_observer_test.dart`：Map 参数相同去重、深层值不同照常压栈；
+- `test/router_delegate_test.dart`：Map 参数键顺序不同仍去重、深层值不同照常压栈；
+- `packages/easy_split_go_router/test/go_route_dedupe_test.dart`：`extra` 为内容相同的 Map 时只保留一页。
+
+---
+
 ## API 变化清单
 
 ### 新增
@@ -158,3 +200,10 @@ void main() {
    (`EasySplit.isWide` / `layoutOf` / `paneWidth` / `paneContentInsets`), the
    `EasySplit.config.onPaneMediaQuery` callback and `EasySplit.paneMediaQuery`. Regression tests:
    `test/pane_media_query_test.dart`.
+3. **Duplicate routes with equal arguments were not deduplicated.** The default `sameRoute`
+   compared `arguments` with `==`, i.e. by reference, while `Map` / `List` arguments are rebuilt on
+   every navigation. The default now compares arguments structurally (budgeted to 12 levels /
+   256 nodes, failing closed on oversized or self-referencing values) and is shared by the
+   observer, the router delegate and `easy_split_go_router`. Regression tests:
+   `test/route_equality_test.dart`, plus Map-argument cases in the dedupe observer / delegate /
+   go_router test files.

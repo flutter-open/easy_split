@@ -96,9 +96,11 @@ EasySplitGoRoute(
 EasySplitGoRoute(path: '/detail', dedupe: false, builder: ...)
 
 // 全局关闭，或自定义「同一页面」的判断（与 easy_split 的其他集成方式共享）。
+// 默认已经按内容比较 arguments；只有需要按业务 id 匹配时才用 sameRoute 覆盖。
 EasySplit.config
   ..dedupeRepeatedRoutes = false
-  ..sameRoute = (a, b) => a.name == b.name && a.arguments == b.arguments;
+  ..sameRoute = (a, b) =>
+      a.name == b.name && (a.arguments as Map?)?['id'] == (b.arguments as Map?)?['id'];
 ```
 
 实现原理：GoRouter 在自己的 `RouteInformationProvider` 内部处理 `push`，外部无法拦截。因此
